@@ -148,9 +148,10 @@ https://yangmao-aihub.<你的子域>.workers.dev/api/health
 | `npx wrangler deploy` 报 `Authentication error` | 重做第 1 步 `npx wrangler login` |
 | 部署成功但网站还提示服务未连接 | 第 5 步没做或网址填错；常见看错点是多写了 `/` 结尾 |
 | health 返回 `hasKey:false` | 第 3 步有 secret 没加或名字打错，面板 Settings → Variables and Secrets 里核对 |
+| **接口突然全部 404 / 网站显示服务加载中** | ⚠️ 两个坑：① **每次 `wrangler deploy` 会把 secret 清空**，部署后必须按第 3 步把 8 个密钥重传一遍；② 本仓库在 Cloudflare 接了 **Git 推送自动构建**（push 后约 40 秒自动部署一次），根目录的 `wrangler.toml` 已保证它部署的是正确代码——**不要删根目录那个 wrangler.toml**，删了自动构建就会把仓库当静态资源部署，接口全 404 |
 | 京东链接转链降级为原始链接 | 个别京东链接偶发转不出通道，属正常降级；淘宝/淘口令转链不受影响 |
 | AI 对话不出商品卡 | `LLM_API_KEY` 没配或硅基流动 key 失效；health 里 `hasLLM:false` 就是这个原因 |
-| 改了代码怎么更新 | `cd worker && npx wrangler deploy` 即可 |
+| 改了代码怎么更新 | `cd worker && npx wrangler deploy`，**然后重传 8 个密钥**；或者直接 `git push`（自动构建会代劳，且不清密钥） |
 
 ---
 
@@ -160,7 +161,10 @@ https://yangmao-aihub.<你的子域>.workers.dev/api/health
 worker/
 ├─ wrangler.toml      # 服务名/入口/公开变量（无密钥）
 ├─ src/index.js       # 路由：/api/search /api/wire /api/chat /api/convert ...
-└─ src/core.js        # 好单库 API 封装、转链、图片代理
+├─ src/core.js        # 好单库 API 封装、转链、图片代理
+└─ src/yunzhan.js     # 云瞻 CPS（本地生活）转链：签名/业务列表/推广链接
+
+（仓库根目录还有一个 wrangler.toml，是给 Git 推送自动构建用的，别删）
 ```
 
 本地联调：`NODE_USE_ENV_PROXY=1 node tools/dev-api.mjs`（端口 8790，读 `tools/.env`）。
