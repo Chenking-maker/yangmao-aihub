@@ -10,7 +10,7 @@
   var isLocal = location.hostname === "127.0.0.1" || location.hostname === "localhost";
   var API_BASE = isLocal
     ? "http://127.0.0.1:8790"
-    : "https://wool-ai-api.workers.dev"; // TODO: Worker 部署后替换为真实域名
+    : "https://yangmao-aihub.370542303.workers.dev"; // Cloudflare Worker（2026-10-16 已部署）
 
   function apiGet(p) { return fetch(API_BASE + p).then(function (r) { return r.json(); }); }
   function apiPost(p, b) {
