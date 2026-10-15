@@ -141,8 +141,8 @@
       '<a class="nav-brand" href="index.html">' + LOGO_SVG + '<span>羊毛AIHUB</span></a>' +
       '<nav class="nav-links">' +
         '<a class="rp-mini" id="rpMini" title="领取淘宝双11超级红包">🧧 超级红包</a>' +
-        '<a href="chat.html" class="' + (active === "chat" ? "active" : "") + '">AI 找券</a>' +
         '<a href="index.html" class="' + (active === "home" ? "active" : "") + '">首页</a>' +
+        '<a href="chat.html" class="' + (active === "chat" ? "active" : "") + '">AI 找券</a>' +
         '<a href="tipoff.html" class="' + (active === "tipoff" ? "active" : "") + '">线报广场</a>' +
         '<a href="collection.html" class="' + (active === "coll" ? "active" : "") + '">羊毛集合</a>' +
       '</nav>';

@@ -32,19 +32,6 @@
     });
   }
 
-  // 淘金币互动（双11 瓜分20亿 · 限时）
-  var COIN_URL = "https://m.tb.cn/h.jYavG0k";
-  var COIN_TAO = "17💲N9pITHyybzL£ https://m.tb.cn/h.jYavG0k CA381";
-  var coinGo = $("coinGo");
-  if (coinGo) coinGo.addEventListener("click", function () {
-    W.toast("正在打开淘金币活动…");
-    window.open(COIN_URL, "_blank", "noopener");
-  });
-  var coinCopy = $("coinCopy");
-  if (coinCopy) coinCopy.addEventListener("click", function () {
-    W.copyText(COIN_TAO, "淘口令已复制，打开淘宝自动识别");
-  });
-
   var API_BASE = W.API_BASE;
   function apiGet(p) { return fetch(API_BASE + p).then(function (r) { return r.json(); }); }
   function toast(msg) { W.toast(msg); }
