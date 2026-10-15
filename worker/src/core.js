@@ -94,8 +94,8 @@ export async function hdkRelink(env, itemid, title) {
   };
 }
 
-/* 京东商品转链：需京东官方账号授权（haodanku 后台 platform=2 开通）。
- * 未开通时返回 null，由调用方降级为原始链接。 */
+/* 京东商品转链：带 JD_UNION_ID（京东联盟推广位）走好单库统一转链口。
+ * 接口异常时返回 null，由调用方降级为原始链接。 */
 export async function hdkJdRelink(env, materialId, couponUrl) {
   var body = new URLSearchParams({
     apikey: env.HDK_APIKEY,
@@ -316,7 +316,7 @@ export function extractLinkMaterial(text) {
 
 /**
  * 凑单工具：解析用户粘贴的淘宝链接/口令 → 商品信息（加入凑单列表）。
- * 淘宝走 item_detail；京东详情需官方授权，降级为手动补价条目。
+ * 淘宝走 item_detail；京东降级为手动补价条目。
  * 返回 normalizeProduct 结果，或 { manual:true, ... } 待手补，或 null。
  */
 export async function parsePastedLink(env, text) {
@@ -329,7 +329,7 @@ export async function parsePastedLink(env, text) {
       manual: true,
       id: m.materialId || "",
       title: "京东商品",
-      note: "京东商品详情需官方授权，补一下到手价就能一起凑"
+      note: "京东商品暂时取不到详情，补一下到手价就能一起凑"
     };
   }
   if (!m.materialId || m.kind === "tb-unknown") {
@@ -350,7 +350,7 @@ export async function parsePastedLink(env, text) {
 
 /**
  * 对话转链主入口：把用户发来的链接/物料转成归因推广链接。
- * 佣金字段一律剥离。京东未授权时降级返回原始链接+说明。
+ * 佣金字段一律剥离。京东转链失败时降级返回原始链接+说明。
  */
 export async function convertLink(env, text) {
   var m = extractLinkMaterial(text);
@@ -373,7 +373,7 @@ export async function convertLink(env, text) {
       converted: false,
       url: m.materialId.indexOf("http") === 0 ? m.materialId : "",
       couponUrl: m.couponUrl,
-      note: "京东官方授权还没开通，先给你原链接，开通后自动转链"
+      note: "这个京东链接暂时转不了，先打开原链接看看吧"
     };
   }
 

@@ -68,8 +68,6 @@ npx wrangler secret put HDK_APIKEY      # 粘贴好单库 apikey
 npx wrangler secret put HDK_PID         # 粘贴推广位 PID
 npx wrangler secret put HDK_TB_NAME     # 粘贴 chenking陈逸希
 npx wrangler secret put JD_UNION_ID     # 1000559363
-npx wrangler secret put JD_AUTH_KEY     # 京东授权KEY
-npx wrangler secret put JD_AUTH_EXPIRE  # 2027-06-02
 npx wrangler secret put LLM_API_KEY     # 硅基流动 key
 npx wrangler secret put LLM_BASE_URL    # https://api.siliconflow.cn/v1
 npx wrangler secret put LLM_MODEL       # Qwen/Qwen2.5-7B-Instruct

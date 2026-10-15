@@ -1,7 +1,7 @@
 ---
 name: yangmaoaihub
 version: 1.0.0
-description: 羊毛AIHUB 找优惠助手 — 实时线报订阅推送（每天最多50条，支持关键词/类目过滤）、双11红包每日提醒、链接转专属优惠通道。用户在微信/QQ 的 AI 助手里安装后，对话即可使用。所有线报/商品链接自动走站长的优惠通道，用户买东西价格不变。
+description: 羊毛AIHUB 找优惠助手 — 实时线报订阅推送（每天最多50条，支持关键词/类目过滤）、双11红包每日提醒、链接转专属优惠通道。安装渠道：①微信 ClawBot（官方插件，聊天窗发「安装 yangmaoaihub」或电脑终端 npx skills add 本仓库）；②WorkBuddy 直接 /yangmaoaihub；③任意 AI 助手发 GitHub 链接按本文档执行。所有线报/商品链接自动走站长的优惠通道，用户买东西价格不变。
 author: 省钱作业君（羊毛AIHUB）
 homepage: https://github.com/Chenking-maker/yangmao-aihub
 ---

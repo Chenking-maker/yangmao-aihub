@@ -292,7 +292,11 @@
       '<a class="side-chip" href="about.html">羊毛AIHUB介绍</a>' +
       '</div></aside>';
 
-    var toggle = '<button class="side-toggle" id="sideToggle" title="隐藏/显示侧栏（快捷键 [）" aria-label="切换侧栏">☰</button>' +
+    /* 侧栏开关：方向箭头图标（展开=◀ 指向侧栏，点击收起；收起=▶ 点击展开）。
+     * 位置固定在侧栏顶部 logo 行右侧 / 收起时在左上角，均不遮挡顶栏与 logo。 */
+    var CHEV_L = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
+    var CHEV_R = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+    var toggle = '<button class="side-toggle" id="sideToggle" title="隐藏侧栏（快捷键 [）" aria-label="切换侧栏">' + CHEV_L + '</button>' +
       '<div class="side-scrim" id="sideScrim"></div>';
 
     document.body.insertAdjacentHTML("afterbegin", toggle + html);
@@ -322,7 +326,7 @@
     if (isNarrow) body.classList.add("ps-closed"); // 窄屏默认收起
     function setSide(open) {
       body.classList.toggle("ps-closed", !open);
-      btn.textContent = open ? "☰" : "☰";
+      btn.innerHTML = open ? CHEV_L : CHEV_R;
       btn.setAttribute("title", open ? "隐藏侧栏（快捷键 [）" : "显示侧栏（快捷键 [）");
     }
     btn.addEventListener("click", function () { setSide(body.classList.contains("ps-closed")); });

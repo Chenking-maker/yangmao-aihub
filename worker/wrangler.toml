@@ -8,8 +8,6 @@ compatibility_date = "2026-10-01"
 #   npx wrangler secret put HDK_PID
 #   npx wrangler secret put HDK_TB_NAME
 #   npx wrangler secret put JD_UNION_ID
-#   npx wrangler secret put JD_AUTH_KEY
-#   npx wrangler secret put JD_AUTH_EXPIRE
 #   npx wrangler secret put LLM_API_KEY
 # 本地开发用 tools/.env（不进 Git）
 

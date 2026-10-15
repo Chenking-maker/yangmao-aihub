@@ -62,7 +62,7 @@
     it.lines.forEach(function (l) {
       if (l.itemId && !l.text) {
         linesHtml += '<div class="wire-foot"><button class="wire-btn act-convert" data-text="' +
-          encodeURIComponent(l.itemId) + '">🛒 转链购买</button></div>';
+          encodeURIComponent(l.itemId) + '">🛒 获取购买链接</button></div>';
       } else if (l.text) {
         linesHtml += '<div class="wire-line">' + W.esc(l.text) + '</div>';
         if (hasLink(l.text)) {

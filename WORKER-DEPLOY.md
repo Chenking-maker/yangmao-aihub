@@ -45,7 +45,7 @@ main = "src/index.js"
 
 ---
 
-## 第 3 步 · 设置密钥（7 个，粘一次值按一次回车）
+## 第 3 步 · 设置密钥（5 个，粘一次值按一次回车）
 
 ```bash
 cd /d/Workbuddy/羊毛网站/worker
@@ -54,8 +54,6 @@ npx wrangler secret put HDK_APIKEY      # 好单库 APIKEY
 npx wrangler secret put HDK_PID         # 好单库 PID（推广位）
 npx wrangler secret put HDK_TB_NAME     # 淘宝授权昵称（淘宝转链归因用）
 npx wrangler secret put JD_UNION_ID     # 京东联盟 ID
-npx wrangler secret put JD_AUTH_KEY     # 京东授权 KEY
-npx wrangler secret put JD_AUTH_EXPIRE  # 授权到期日
 npx wrangler secret put LLM_API_KEY     # 硅基流动 API Key（AI 对话）
 ```
 
@@ -69,8 +67,6 @@ npx wrangler secret put LLM_API_KEY     # 硅基流动 API Key（AI 对话）
 | HDK_PID | HDK_PID |
 | HDK_TB_NAME | HDK_TB_NAME |
 | JD_UNION_ID | JD_UNION_ID |
-| JD_AUTH_KEY | JD_AUTH_KEY |
-| JD_AUTH_EXPIRE | JD_AUTH_EXPIRE |
 | LLM_API_KEY | LLM_API_KEY |
 
 > 💡 也可以不敲命令、全部在网页加：Cloudflare 面板 → **Workers & Pages → yangmao-aihub → Settings → Variables and Secrets → Add**，Name/Value 按上表填，类型选 **Secret**。效果一样。
@@ -142,7 +138,7 @@ https://yangmao-aihub.<你的子域>.workers.dev/api/health
 | `npx wrangler deploy` 报 `Authentication error` | 重做第 1 步 `npx wrangler login` |
 | 部署成功但网站还提示服务未连接 | 第 5 步没做或网址填错；常见看错点是多写了 `/` 结尾 |
 | health 返回 `hasKey:false` | 第 3 步有 secret 没加或名字打错，面板 Settings → Variables and Secrets 里核对 |
-| 京东链接转链降级为原始链接 | 京东官方授权未开通：好单库后台 → Promotioncenter → auth → platform=2 开通 |
+| 京东链接转链降级为原始链接 | 个别京东链接偶发转不出通道，属正常降级；淘宝/淘口令转链不受影响 |
 | AI 对话不出商品卡 | `LLM_API_KEY` 没配或硅基流动 key 失效；health 里 `hasLLM:false` 就是这个原因 |
 | 改了代码怎么更新 | `cd worker && npx wrangler deploy` 即可 |
 

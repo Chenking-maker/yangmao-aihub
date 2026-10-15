@@ -1,6 +1,6 @@
-# /yangmaoaihub Skill 使用教程（微信 / QQ）
+# /yangmaoaihub Skill 使用教程（微信 ClawBot / WorkBuddy / 其他 AI 助手）
 
-> 把羊毛AIHUB 装进微信 / QQ 的 AI 助手里，发一句命令就能用，不用开网页。
+> 把羊毛AIHUB 装进你的 AI 助手，发一句命令就能用，不用开网页。
 
 ## 它能做什么
 
@@ -11,18 +11,35 @@
 | 🔗 **优惠链接直达** | 推出来的口令和链接，全部已转好，点开就能领券下单 |
 | 🧧 **红包每日提醒** | 定时提醒领双11 红包，一键直达，绝不漏领 |
 
-## 安装步骤（微信 / QQ 通用）
+## 安装步骤
 
-1. 打开微信或 QQ 里的 **AI 助手**（支持第三方 Skill 的版本）
-2. 在对话框输入并发送：**`/yangmaoaihub`**
-3. 按提示点击 **安装**，等出现「羊毛AIHUB Skill 已就绪」
-4. 发一句「订阅 双11红包 + 纸巾 + 狗粮」设置你想看的内容
-5. 完成！之后有新线报 / 红包提醒会直接在对话里推送
+### 路径一：微信 ClawBot（推荐，微信里直接聊）
 
-## 常用指令示例
+目前唯一能在微信聊天窗口直接调用 Skill 的官方通道：
+
+1. 电脑安装 **QClaw**（qclaw.qq.com，已部署 OpenClaw 可跳过）
+2. 微信 → 我 → 设置 → **插件** → 找到 **ClawBot** → 启用（灰度中，看不到就升级微信到 8.0.70+ 重开）
+3. 插件页「详细」里复制安装命令，在电脑终端执行：
+   `npx -y @tencent-weixin/openclaw-weixin-cli@latest install`
+4. 终端弹出二维码 → 微信扫码授权 → 微信联系人出现「微信ClawBot」
+5. 在微信 ClawBot 聊天窗直接发：**「安装 yangmaoaihub」**
+   - 若回复没找到该技能，在电脑终端补一条：
+     `npx --yes skills add https://github.com/Chenking-maker/yangmao-aihub/tree/master/skill/yangmaoaihub -a openclaw -y`
+
+### 路径二：WorkBuddy（能力最全）
+
+在 WorkBuddy 对话框发送 **`/yangmaoaihub`**，按提示确认安装。
+
+### 路径三：任意 AI 助手（元宝 / DeepSeek / 豆包 / Kimi…）
+
+把这条消息发给任意 AI 助手，它会按 Skill 说明帮你整理线报和红包提醒：
+`安装羊毛AIHUB Skill：https://github.com/Chenking-maker/yangmao-aihub/tree/master/skill/yangmaoaihub`
+
+> ⚠️ 元宝、ima 暂不支持第三方 Skill 安装（元宝加好友后也会回复"用不了"）。想在微信里直接用，请走路径一 ClawBot。
+
+## 装好之后：常用指令示例
 
 ```
-/yangmaoaihub                      # 安装 / 唤起
 订阅纸巾、狗粮、纯牛奶              # 设置关键词订阅
 只推淘宝线报                        # 只看某个类目
 每天最多推 50 条                    # 调整推送上限

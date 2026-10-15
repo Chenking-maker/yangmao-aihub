@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>羊毛AIHUB · Skill — 在微信/QQ 里用 AI 帮你薅羊毛</title>
-<meta name="description" content="羊毛AIHUB Skill：在微信/QQ 的 AI 助手里安装 /yangmaoaihub，实时线报自动推送（每天最多 50 条）、关键词/类目订阅、双11 红包每日提醒，所有链接自动转成你的专属优惠通道。">
+<meta name="description" content="羊毛AIHUB Skill：推荐走微信 ClawBot 官方插件（绑定后微信聊天窗直接发「安装 yangmaoaihub」），也支持 WorkBuddy 与任意 AI 助手。实时线报自动推送（每天最多 50 条）、关键词/类目订阅、双11 红包每日提醒，所有链接自动转成你的专属优惠通道。">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23d93832'/><g fill='%23ffffff'><circle cx='17' cy='20' r='6.5'/><circle cx='24' cy='18' r='6'/><circle cx='23' cy='25' r='5.5'/><circle cx='16' cy='26' r='5'/></g><ellipse cx='20' cy='25' rx='5' ry='4.6' fill='%23ffffff'/><circle cx='18.4' cy='24.3' r='0.9' fill='%23222'/><circle cx='21.6' cy='24.3' r='0.9' fill='%23222'/><path d='M16 21 q-2.6 -1 -2.7 -3.7 q2.6 0.8 3.7 2.9z' fill='%23eef0f3'/><path d='M24 21 q2.6 -1 2.7 -3.7 q-2.6 0.8 -3.7 2.9z' fill='%23eef0f3'/><g><circle cx='33.5' cy='12' r='4.6' fill='%23f6c544' stroke='%23e0a800' stroke-width='0.8'/><text x='33.5' y='14.6' font-size='6' font-weight='700' fill='%239a6a00' text-anchor='middle'>¥</text></g><rect x='4.5' y='4.5' width='13' height='8.6' rx='4' fill='%23111827'/><text x='11' y='10.7' font-size='6' font-weight='700' fill='%235eead4' text-anchor='middle'>AI</text><path d='M10.4 12.4 l-1.2 3.4 1.9 -0.7 -1 3.4' fill='none' stroke='%23ffd23f' stroke-width='1.3' stroke-linejoin='round' stroke-linecap='round'/></svg>">
 <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -15,7 +15,7 @@
 <div class="skill-hero">
   <div class="skill-ico">⚡🐑</div>
   <h1>羊毛AIHUB · Skill</h1>
-  <p class="sub">把羊毛AIHUB 装进你的 AI 助手（微信 / QQ 里都能用）：<b>实时线报自动推送</b>、关键词订阅、双11 红包每日提醒 —— 不用开网站，对话就能薅。</p>
+  <p class="sub">把羊毛AIHUB 装进你的 AI 助手：<b>微信 ClawBot 里直接聊</b>，或装进 WorkBuddy / 任意 AI 助手 —— 实时线报自动推送、关键词订阅、双11 红包每日提醒，不用开网站，对话就能薅。</p>
   <div class="skill-cmd">/yangmaoaihub</div>
 </div>
 
@@ -43,44 +43,68 @@
   <!-- 安装教程 -->
   <div class="skill-sec">
     <h2>📲 怎么安装（两分钟搞定）</h2>
+    <p style="font-size:13px;line-height:1.75;color:var(--text-2);margin:0 0 14px">Skill 要装在「支持 Skill 的 AI 助手」里。下面三条路径按推荐程度排序，<b>想直接在微信里用的，走路径一</b>。</p>
 
-    <div class="sk-steps">
-      <div class="sk-step">
-        <div class="sk-step-no">第 1 步</div>
-        <h3>找到你的 AI 助手</h3>
-        <p>Skill 是装在「AI 助手」里的。下面任选一个你手机里有的：</p>
-        <ul class="sk-find">
-          <li><b>微信里：</b>搜 <b>「腾讯元宝」</b>小程序 / 公众号，或把<b>元宝加为微信好友</b>，直接跟它对话。</li>
-          <li><b>QQ 里：</b>在 QQ 搜索栏搜 <b>「QQ 机器人」「AI 助手」</b>，挑一个支持 Skill / 插件安装的机器人，加为好友。</li>
-          <li><b>手机 App：</b>元宝、DeepSeek、豆包、Kimi、通义……任意一个 AI App 都行。</li>
-          <li><b>实在找不到：</b>直接用<b>网页版</b>（首页「AI 找券对话」），功能一样，不用装任何东西。</li>
-        </ul>
+    <!-- 路径一：微信 ClawBot -->
+    <div class="sk-path best">
+      <div class="sk-path-head">
+        <span class="sk-path-tag">推荐 · 微信里直接聊</span>
+        <h3>路径一：微信 ClawBot（微信官方 AI 插件）</h3>
       </div>
-      <div class="sk-step">
-        <div class="sk-step-no">第 2 步</div>
-        <h3>发送安装命令</h3>
-        <p>打开 AI 助手对话框，原样发送下面这行命令：</p>
-        <div class="skill-cmd sm">/yangmaoaihub</div>
-        <p>按提示点<b>确认 / 安装</b>。看到「安装成功」就搞定了。</p>
-        <p class="sk-alt">💡 如果你的助手说「不认识这个命令」，把这条消息发给它，一样能装上：<br><code>安装羊毛AIHUB Skill：https://github.com/Chenking-maker/yangmao-aihub/tree/master/skill/yangmaoaihub</code></p>
+      <p>这是目前唯一能在<b>微信聊天窗口</b>里直接调用 Skill 的官方通道：把 AI 助手（OpenClaw / QClaw）绑定到微信，之后在微信里<b>发一句话就能装、发一句话就能用</b>，不用开网站、不用装 App。</p>
+      <ol class="sk-ol">
+        <li><b>电脑装 QClaw</b>：打开 <code>qclaw.qq.com</code> 下载安装（已部署 OpenClaw 可跳过这步）。</li>
+        <li><b>微信启用 ClawBot 插件</b>：微信 → 我 → 设置 → <b>插件</b> → 找到 <b>ClawBot</b> → 启用。<span class="sk-dim">（灰度放量中，没看到入口就把微信升级到 8.0.70 以上，杀掉进程重开；安卓用户也可在 QClaw 里直接找微信绑定入口扫码）</span></li>
+        <li><b>装微信通道</b>：插件详情页点「详细」复制安装命令，在电脑终端执行：<br><code>npx -y @tencent-weixin/openclaw-weixin-cli@latest install</code></li>
+        <li><b>扫码绑定</b>：终端弹出二维码 → 微信「扫一扫」→ 确认授权。微信联系人里会出现「微信ClawBot」。</li>
+        <li><b>装羊毛AIHUB</b>：在微信 ClawBot 聊天窗直接发一句话：<br><b>「安装 yangmaoaihub」</b>——它会自动找到并装上，全程不用碰电脑。</li>
+      </ol>
+      <p class="sk-alt">💡 如果微信里回复「没找到这个技能」：Skill 还没上架技能市场，在跑 ClawBot 的电脑终端补一条命令即可（装的就是本仓库里的 Skill 本体）：<br><code>npx --yes skills add https://github.com/Chenking-maker/yangmao-aihub/tree/master/skill/yangmaoaihub -a openclaw -y</code><br>装完回到微信，直接说「订阅纸巾线报」就能用了。</p>
+    </div>
+
+    <!-- 路径二：WorkBuddy -->
+    <div class="sk-path">
+      <div class="sk-path-head">
+        <span class="sk-path-tag">最稳 · 能力最全</span>
+        <h3>路径二：WorkBuddy（电脑 AI 工作台）</h3>
       </div>
-      <div class="sk-step">
-        <div class="sk-step-no">第 3 步</div>
-        <h3>订阅你想看的</h3>
-        <p>装好后，直接用人话跟它说，比如：</p>
-        <ul class="sk-examples">
-          <li>「<b>订阅纸巾和狗粮的线报</b>」</li>
-          <li>「<b>每天早上 9 点提醒我领双11红包</b>」</li>
-          <li>「<b>只推淘宝线报，一天最多 20 条</b>」</li>
-        </ul>
-        <p>想改随时说：「取消订阅羽绒服」「推送慢一点」。</p>
+      <p>在 WorkBuddy 的对话框直接发送安装命令：</p>
+      <div class="skill-cmd sm">/yangmaoaihub</div>
+      <p>按提示点<b>确认 / 安装</b>，看到「安装成功」即搞定。定时推送、关键词订阅、转链、找券全部能力可用。</p>
+    </div>
+
+    <!-- 路径三：任意 AI 助手 -->
+    <div class="sk-path">
+      <div class="sk-path-head">
+        <span class="sk-path-tag">备用 · 零门槛</span>
+        <h3>路径三：任意 AI 助手（元宝 / DeepSeek / 豆包 / Kimi…）</h3>
       </div>
+      <p>把下面这条消息发给任意一个 AI 助手，它会按 Skill 说明每天帮你整理线报、提醒红包：</p>
+      <div class="skill-cmd sm">安装羊毛AIHUB Skill：https://github.com/Chenking-maker/yangmao-aihub/tree/master/skill/yangmaoaihub</div>
+      <p class="sk-dim">这类 App 大多没有真正的「Skill 安装」机制，实际是让 AI 按说明文档执行；能否定时推送取决于 App 自身的提醒能力。要完整体验请走路径一或路径二。</p>
     </div>
 
     <p style="margin-top:14px"><a href="https://github.com/Chenking-maker/yangmao-aihub/tree/master/skill/yangmaoaihub" target="_blank" rel="noopener">📦 查看开源 Skill 源码（GitHub）›</a></p>
 
     <div class="skill-note" style="margin-top:14px">
-      ❓ <b>常见问题</b>：Q：我的 AI 助手里没有「Skill 安装」入口怎么办？A：不影响使用——把第 2 步的备选消息发给任意 AI 助手（元宝/DeepSeek/豆包都行），它会按 Skill 说明每天帮你整理线报和红包提醒；再不行就用<a href="chat.html" style="color:var(--red);font-weight:600">网页版 AI 找券</a>，功能完全一样。
+      ❓ <b>元宝 / ima 为什么装不了？</b>腾讯元宝是封闭 AI 助手，暂不开放第三方 Skill 安装（加为好友后它也会回复「用不了」）；ima 是知识库工具，不走 Skill 生态。<b>想在微信里直接对话薅羊毛，请走上面的「路径一 · 微信 ClawBot」</b>。
+    </div>
+  </div>
+
+  <!-- 装好之后 -->
+  <div class="skill-sec">
+    <h2>🎯 装好之后，直接用人话跟它说</h2>
+    <div class="sk-steps">
+      <div class="sk-step">
+        <div class="sk-step-no">订阅</div>
+        <h3>告诉它你想看什么</h3>
+        <ul class="sk-examples">
+          <li>「<b>订阅纸巾和狗粮的线报</b>」——只推命中关键词的，其余一律不发</li>
+          <li>「<b>只推淘宝线报，一天最多 20 条</b>」</li>
+          <li>「<b>每天早上 9 点提醒我领双11红包</b>」</li>
+        </ul>
+        <p>想改随时说：「取消订阅羽绒服」「推送慢一点」。设置只保存在你自己的设备上。</p>
+      </div>
     </div>
   </div>
 
