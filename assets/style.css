@@ -1120,21 +1120,23 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
 /* ---- 淘金币：首页紧凑横幅 + 独立页 ---- */
 a.coin-banner {
   display: flex; align-items: center; gap: 16px; text-decoration: none;
-  margin: 26px 32px 0; padding: 18px 22px;
-  background: linear-gradient(100deg, #fffaf0 0%, #fff4dd 55%, #ffefd0 100%);
-  border: 1px solid #f2ddb0; border-radius: var(--r-lg);
+  max-width: 1120px; margin: 26px auto 0; padding: 16px 22px;
+  background: linear-gradient(100deg, #fffaf0 0%, #fff7ea 55%, #fff3d6 100%);
+  border: 1px solid #f0dcb4; border-radius: var(--r-lg);
   transition: box-shadow 0.18s, transform 0.18s;
 }
 a.coin-banner:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
-a.coin-banner .coin-emoji { font-size: 30px; line-height: 1; }
+a.coin-banner .coin-emoji { font-size: 24px; line-height: 1; }
 .coin-banner-body { flex: 1; min-width: 0; }
-.coin-banner-body b { display: block; font-size: 16px; color: #8a5a12; margin-bottom: 4px; }
-.coin-banner-body i { display: block; font-style: normal; font-size: 13px; color: #a97b2c; }
+.coin-banner-body b { display: block; font-size: 14px; color: #8a5a12; margin-bottom: 3px; }
+.coin-banner-body i { display: block; font-style: normal; font-size: 12px; color: #a97b2c; }
 a.coin-banner .coin-btn {
-  flex: none; font-size: 13px; font-weight: 700; color: #fff;
-  background: linear-gradient(135deg, #f0a92e, #e08a1a);
-  padding: 9px 16px; border-radius: 999px; white-space: nowrap;
+  flex: none; font-size: 12px; font-weight: 600; color: #8a5a12;
+  background: rgba(255,255,255,0.75);
+  border: 1px solid #e6c98f;
+  padding: 7px 14px; border-radius: 999px; white-space: nowrap;
 }
+a.coin-banner:hover .coin-btn { background: #f0a92e; color: #fff; border-color: #f0a92e; }
 
 .coin-page .coin-hero-card {
   background: linear-gradient(100deg, #fffaf0 0%, #fff3da 60%, #ffedcb 100%);
@@ -1334,3 +1336,56 @@ a.coin-banner .coin-btn {
   background: var(--red-bg); border: 1px solid var(--red-border);
   border-radius: 6px; padding: 2px 7px;
 }
+
+/* ---- 独立页可隐藏侧栏（chat/tipoff/coutao/xhd/coin/collection/wechat/about/skill） ---- */
+.page-sidebar {
+  position: fixed; top: 56px; left: 0; bottom: 0; width: var(--sidebar-w); z-index: 60;
+  display: flex; flex-direction: column; gap: 18px; overflow-y: auto;
+  background: var(--surface); border-right: 1px solid var(--hairline);
+  padding: 16px 12px;
+  transition: transform 0.22s ease;
+}
+body.has-page-side .page-main-wrap { margin-left: var(--sidebar-w); transition: margin-left 0.22s ease; }
+body.has-page-side.ps-closed .page-main-wrap { margin-left: 0; }
+body.has-page-side.ps-closed .page-sidebar { transform: translateX(-100%); }
+.side-toggle {
+  position: fixed; top: 14px; left: calc(var(--sidebar-w) + 10px); z-index: 61;
+  width: 34px; height: 34px; border-radius: var(--r-sm); cursor: pointer;
+  border: 1px solid var(--hairline); background: var(--surface); color: var(--text-2);
+  font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  transition: left 0.22s ease, color 0.15s, border-color 0.15s;
+}
+.side-toggle:hover { color: var(--text); border-color: var(--hairline-2); }
+body.has-page-side.ps-closed .side-toggle { left: 12px; }
+.side-scrim {
+  display: none; position: fixed; inset: 0; z-index: 59;
+  background: rgba(20, 24, 30, 0.35);
+}
+@media (max-width: 900px) {
+  .side-scrim { display: block; }
+  body.ps-closed .side-scrim { display: none; }
+}
+@media (max-width: 900px) {
+  .side-toggle { top: 10px; }
+  body.has-page-side .page-main-wrap { margin-left: 0; }
+}
+
+/* ---- Skill 页：详细安装教程 ---- */
+.sk-steps { display: grid; gap: 14px; }
+.sk-step {
+  background: var(--surface-2); border: 1px solid var(--hairline);
+  border-radius: var(--r-md); padding: 16px 18px;
+}
+.sk-step-no {
+  display: inline-block; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  color: var(--red); background: var(--red-bg); border: 1px solid var(--red-border);
+  border-radius: 999px; padding: 3px 10px; margin-bottom: 8px;
+}
+.sk-step h3 { font-size: 15px; font-weight: 700; margin: 0 0 6px; }
+.sk-step p { font-size: 13px; line-height: 1.75; color: var(--text-2); margin: 0 0 6px; }
+.sk-find, .sk-examples { margin: 6px 0 4px; padding-left: 18px; display: grid; gap: 5px; }
+.sk-find li, .sk-examples li { font-size: 13px; line-height: 1.7; color: var(--text-2); }
+.sk-find b { color: var(--text); }
+.skill-cmd.sm { display: inline-block; font-size: 15px; padding: 8px 16px; margin: 4px 0 6px; }
+.sk-alt { font-size: 12.5px; }
+.sk-alt code { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); word-break: break-all; }

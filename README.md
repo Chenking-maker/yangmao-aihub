@@ -27,7 +27,7 @@
 
 1. **直接用**：打开 **https://chenking-maker.github.io/yangmao-aihub/** → 跟 AI 说想买什么
 2. **微信/QQ 里用**：见 [Skill 介绍页](https://chenking-maker.github.io/yangmao-aihub/skill.html)，输入 `/yangmaoaihub` 安装
-3. **自部署**：见 [DEPLOY.md](DEPLOY.md)（GitHub Pages + Cloudflare Worker，全免费额度即可跑）
+3. **自部署**：见 [DEPLOY.md](DEPLOY.md)（GitHub Pages + Cloudflare Worker，全免费额度即可跑）；后端详细图文教程见 [WORKER-DEPLOY.md](WORKER-DEPLOY.md)
 
 ## 📚 深入了解（Wiki）
 

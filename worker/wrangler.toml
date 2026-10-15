@@ -1,15 +1,18 @@
-name = "wool-ai-api"
+name = "yangmao-aihub"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 
-# 部署：npx wrangler deploy
-# 密钥（不要写进这个文件）：
+# 部署命令（在 worker 目录下执行）：npx wrangler deploy
+# 密钥一律用命令设置，不要写进这个文件：
 #   npx wrangler secret put HDK_APIKEY
 #   npx wrangler secret put HDK_PID
 #   npx wrangler secret put HDK_TB_NAME
+#   npx wrangler secret put JD_UNION_ID
+#   npx wrangler secret put JD_AUTH_KEY
+#   npx wrangler secret put JD_AUTH_EXPIRE
 #   npx wrangler secret put LLM_API_KEY
-# 本地开发用 .dev.vars（已在 .gitignore 中）
+# 本地开发用 tools/.env（不进 Git）
 
 [vars]
-LLM_BASE_URL = "https://api.openai.com/v1"
-LLM_MODEL = "gpt-4o-mini"
+LLM_BASE_URL = "https://api.siliconflow.cn/v1"
+LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"

@@ -222,10 +222,121 @@
     run();
   }
 
+  /* ================= 独立页侧栏（可隐藏） =================
+   * 所有 .page-wrap 布局的独立页（chat/tipoff/coutao/xhd/coin/collection/
+   * wechat/about/skill）注入与首页一致的左侧栏 + ☰ 隐藏按钮。
+   * index.html（.layout）自带侧栏，不受影响。 */
+  var SIDE_LINKS = [
+    { group: "对话", items: [
+      { href: "chat.html", label: "AI 找券对话", key: "chat",
+        icon: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>' },
+      { href: "coin.html", label: "淘金币互助", key: "coin",
+        icon: '<circle cx="12" cy="12" r="10"/><path d="M8.5 9.5c.5-1.2 1.9-2 3.5-2 2 0 3.5 1 3.5 2.4 0 1.3-1 2-3 2.4-2.2.4-3 1.2-3 2.5 0 1.4 1.5 2.4 3.5 2.4 1.6 0 3-.8 3.5-2"/><path d="M12 5.5v13"/>' }
+    ] },
+    { group: "红包专区", items: [
+      { href: "index.html#redpacket", label: "双11 红包入口", key: "rp",
+        icon: '<path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>' },
+      { href: "index.html#activities", label: "活动会场", key: "act",
+        icon: '<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>' }
+    ] },
+    { group: "工具箱", items: [
+      { href: "tipoff.html", label: "实时线报广场", key: "tipoff",
+        icon: '<path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>' },
+      { href: "coutao.html", label: "凑单工具", key: "coutao",
+        icon: '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/>' },
+      { href: "xhd.html", label: "消灭小红包", key: "xhd",
+        icon: '<path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>' },
+      { href: "index.html#calendar", label: "双11 日历", key: "cal",
+        icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' }
+    ] },
+    { group: "榜单", items: [
+      { href: "index.html#seckill", label: "今日秒杀", key: "sk",
+        icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
+      { href: "index.html#feed", label: "好价榜", key: "feed",
+        icon: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>' }
+    ] },
+    { group: "聚合", items: [
+      { href: "collection.html", label: "羊毛集合", key: "coll",
+        icon: '<path d="M3 7v10a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 17V7a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 7z"/><path d="M21 8l-9 4-9-4"/><path d="M3 12l9 4 9-4"/>' }
+    ] }
+  ];
+
+  function buildPageSidebar() {
+    if (document.querySelector(".layout")) return; // 首页（自带侧栏）不注入
+
+    var here = (location.pathname.split("/").pop() || "index.html").toLowerCase();
+    document.body.classList.add("has-page-side");
+
+    var html = '<aside class="page-sidebar" id="pageSidebar">' +
+      '<a class="brand" href="index.html">' + LOGO_SVG +
+      '<span class="brand-name">羊毛AIHUB<small>AI · 省钱作业君</small></span></a>';
+    for (var g = 0; g < SIDE_LINKS.length; g++) {
+      var grp = SIDE_LINKS[g];
+      html += '<div class="nav-group"><div class="nav-label">' + grp.group + '</div><nav class="side-nav">';
+      for (var i = 0; i < grp.items.length; i++) {
+        var it = grp.items[i];
+        var target = it.href.split("#")[0];
+        var active = target === here ? " active" : "";
+        html += '<a href="' + it.href + '" class="' + active.trim() + '">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + it.icon + '</svg>' +
+          it.label + '</a>';
+      }
+      html += '</nav></div>';
+    }
+    html += '<div class="side-foot">' +
+      '<div class="side-row">' +
+        '<a class="side-chip" href="https://github.com/Chenking-maker/yangmao-aihub" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.18-1.49 3.14-1.18 3.14-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.41-2.69 5.38-5.25 5.66.41.36.78 1.05.78 2.12v3.15c0 .31.21.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>GitHub</a>' +
+        '<a class="side-chip" href="wechat.html"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 4C4.36 4 1 6.91 1 10.5c0 1.95 1.05 3.69 2.73 4.86L3 18.5l3.2-1.6c.74.2 1.52.31 2.3.31.27 0 .53-.01.79-.04A5.5 5.5 0 0 1 9 15.5C9 11.91 12.36 9 16.5 9c.3 0 .6.01.89.04C16.78 6.08 13 4 8.5 4zm-2.2 3.2a.95.95 0 1 1 0 1.9.95.95 0 0 1 0-1.9zm4.4 0a.95.95 0 1 1 0 1.9.95.95 0 0 1 0-1.9zM16.5 10.5c-3.31 0-6 2.24-6 5s2.69 5 6 5c.67 0 1.32-.09 1.93-.26L22 21.5l-.6-2.4c1.6-1.1 2.6-2.74 2.6-4.6 0-2.76-2.69-5-6-5zm-2 3.3a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6zm4 0a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6z"/></svg>微信群</a>' +
+      '</div>' +
+      '<a class="side-chip" href="skill.html">⚡ 羊毛AIHUB · Skill</a>' +
+      '<a class="side-chip" href="about.html">羊毛AIHUB介绍</a>' +
+      '</div></aside>';
+
+    var toggle = '<button class="side-toggle" id="sideToggle" title="隐藏/显示侧栏（快捷键 [）" aria-label="切换侧栏">☰</button>' +
+      '<div class="side-scrim" id="sideScrim"></div>';
+
+    document.body.insertAdjacentHTML("afterbegin", toggle + html);
+
+    /* 把主内容（topnav/侧栏/按钮/script/toast 之外的所有节点）包进
+     * .page-main-wrap，统一加左边距，免去逐个页面改结构 */
+    var keep = /(^|\s)(topnav|page-sidebar|toast|side-toggle|side-scrim)(\s|$)/;
+    var nodes = [];
+    for (var i = 0; i < document.body.childNodes.length; i++) {
+      var n = document.body.childNodes[i];
+      if (n.nodeType === 1) {
+        if (n.tagName === "SCRIPT" || n.tagName === "TEMPLATE" || keep.test(n.className || "")) continue;
+        nodes.push(n);
+      } else if (n.nodeType === 3 && !(n.textContent || "").trim()) {
+        continue;
+      }
+    }
+    if (nodes.length) {
+      var wrapEl = document.createElement("div");
+      wrapEl.className = "page-main-wrap";
+      document.body.insertBefore(wrapEl, nodes[0]);
+      for (var j = 0; j < nodes.length; j++) wrapEl.appendChild(nodes[j]);
+    }
+
+    var body = document.body, btn = $("sideToggle"), scrim = $("sideScrim");
+    var isNarrow = window.matchMedia("(max-width: 900px)").matches;
+    if (isNarrow) body.classList.add("ps-closed"); // 窄屏默认收起
+    function setSide(open) {
+      body.classList.toggle("ps-closed", !open);
+      btn.textContent = open ? "☰" : "☰";
+      btn.setAttribute("title", open ? "隐藏侧栏（快捷键 [）" : "显示侧栏（快捷键 [）");
+    }
+    btn.addEventListener("click", function () { setSide(body.classList.contains("ps-closed")); });
+    if (scrim) scrim.addEventListener("click", function () { body.classList.add("ps-closed"); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "[" || e.key === "【") { setSide(body.classList.contains("ps-closed")); }
+    });
+  }
+
   global.WOOL = {
     $: $, API_BASE: API_BASE, apiGet: apiGet, apiPost: apiPost,
     toast: toast, copyText: copyText, esc: esc, LOGO_SVG: LOGO_SVG,
-    buildTopnav: buildTopnav, openActivity: openActivity,
+    buildTopnav: buildTopnav, buildPageSidebar: buildPageSidebar,
+    openActivity: openActivity,
     openTbRedpacket: openTbRedpacket, openJdRedpacket: openJdRedpacket,
     findActivity: findActivity,
     fmtSales: fmtSales, saveOf: saveOf, picUrl: picUrl,
@@ -234,4 +345,7 @@
   };
 
   mountApiBanner();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", buildPageSidebar);
+  } else { buildPageSidebar(); }
 })(window);
