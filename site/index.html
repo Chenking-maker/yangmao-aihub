@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>羊毛AIHUB · 找优惠？AI帮你找！— 对话找券、领红包、凑单一站搞定</title>
+<meta name="description" content="羊毛AIHUB：全免费的 AI 省钱助手。和 AI 说想买啥，自动找隐藏优惠券；双11 超级红包、京享红包一键领；凑单工具、今日秒杀、好价榜实时更新。">
+<meta name="keywords" content="羊毛AIHUB,薅羊毛,优惠券,双11红包,超级红包,找券,省钱,凑单,秒杀,AI找券">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23d93832'/><g fill='%23ffffff'><circle cx='17' cy='20' r='6.5'/><circle cx='24' cy='18' r='6'/><circle cx='23' cy='25' r='5.5'/><circle cx='16' cy='26' r='5'/></g><ellipse cx='20' cy='25' rx='5' ry='4.6' fill='%23ffffff'/><circle cx='18.4' cy='24.3' r='0.9' fill='%23222'/><circle cx='21.6' cy='24.3' r='0.9' fill='%23222'/><path d='M16 21 q-2.6 -1 -2.7 -3.7 q2.6 0.8 3.7 2.9z' fill='%23eef0f3'/><path d='M24 21 q2.6 -1 2.7 -3.7 q-2.6 0.8 -3.7 2.9z' fill='%23eef0f3'/><g><circle cx='33.5' cy='12' r='4.6' fill='%23f6c544' stroke='%23e0a800' stroke-width='0.8'/><text x='33.5' y='14.6' font-size='6' font-weight='700' fill='%239a6a00' text-anchor='middle'>¥</text></g><rect x='4.5' y='4.5' width='13' height='8.6' rx='4' fill='%23111827'/><text x='11' y='10.7' font-size='6' font-weight='700' fill='%235eead4' text-anchor='middle'>AI</text><path d='M10.4 12.4 l-1.2 3.4 1.9 -0.7 -1 3.4' fill='none' stroke='%23ffd23f' stroke-width='1.3' stroke-linejoin='round' stroke-linecap='round'/></svg>">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topnav" id="topnav"></header>
+
+<div class="layout">
+
+  <!-- ============ 左侧栏（分组） ============ -->
+  <aside class="sidebar">
+    <a class="brand" href="index.html">
+      <span id="sideLogo"></span>
+      <span class="brand-name">羊毛AIHUB<small>AI · 省钱作业君</small></span>
+    </a>
+
+    <div class="nav-group">
+      <div class="nav-label">对话</div>
+      <nav class="side-nav">
+        <a href="#top" class="active" data-sec="top">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          AI 找券对话
+        </a>
+      </nav>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">红包专区</div>
+      <nav class="side-nav">
+        <a href="#redpacket" data-sec="redpacket">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+          双11 红包入口
+        </a>
+        <a href="#activities" data-sec="activities">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+          活动会场
+        </a>
+      </nav>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">工具箱</div>
+      <nav class="side-nav">
+        <a href="#toolbox" data-sec="toolbox">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>
+          凑单工具
+        </a>
+        <a href="#toolbox" data-sec="calendar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          双11 日历
+        </a>
+        <a href="tipoff.html">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+          实时线报广场
+        </a>
+      </nav>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">榜单</div>
+      <nav class="side-nav">
+        <a href="#seckill" data-sec="seckill">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          今日秒杀
+        </a>
+        <a href="#feed" data-sec="feed">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+          好价榜
+        </a>
+      </nav>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">聚合</div>
+      <nav class="side-nav">
+        <a href="collection.html">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 17V7a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 7z"/><path d="M21 8l-9 4-9-4"/><path d="M3 12l9 4 9-4"/></svg>
+          羊毛集合
+        </a>
+      </nav>
+    </div>
+
+    <div class="side-foot">
+      <div class="side-row">
+        <a class="side-chip" href="https://github.com" target="_blank" rel="noopener">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.18-1.49 3.14-1.18 3.14-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.41-2.69 5.38-5.25 5.66.41.36.78 1.05.78 2.12v3.15c0 .31.21.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+          GitHub
+        </a>
+        <button class="side-chip" id="themeToggleSide">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span id="themeLabelSide">深色</span>
+        </button>
+      </div>
+      <a class="side-chip" href="#toolbox"><i></i>双11 倒计时进行中</a>
+    </div>
+  </aside>
+
+  <!-- ============ 主区 ============ -->
+  <div class="main">
+
+    <!-- 顶部口号 Hero -->
+    <section class="hero">
+      <div class="hero-main">
+        <div class="hero-slogan">找优惠？AI 帮你找！</div>
+        <div class="hero-sub">说想买啥，AI 自动找隐藏优惠券、领双11 红包、算凑单。全免费，打开就能用。</div>
+        <div class="hero-by">创造者 <span class="creator-pill">省钱作业君</span></div>
+      </div>
+      <div class="hero-mascot" id="heroMascot"></div>
+    </section>
+
+    <!-- 双11 红包入口（首页顶部） -->
+    <section class="rp-band" id="redpacket">
+      <div class="rp-band-head">
+        <h2>双11 红包</h2>
+        <span class="tag">DAILY · 每天可领</span>
+        <span class="line"></span>
+        <span class="cd" id="bandCd">--</span>
+      </div>
+      <div class="rp-grid">
+        <div class="rp-card tb">
+          <div class="rp-top">
+            <div class="rp-logo">🧧</div>
+            <div>
+              <div class="rp-name">淘宝 · 双11超级红包</div>
+              <div class="rp-sub">TAOBAO · SUPER RED PACKET</div>
+            </div>
+          </div>
+          <div class="rp-desc">每天都能领，下单直接抵现。红包金额随机，领得越早攒得越多，双11 期间全场通用。</div>
+          <button class="rp-btn" id="rpTbBtn">立即领取 ›</button>
+        </div>
+        <div class="rp-card jd">
+          <div class="rp-top">
+            <div class="rp-logo">🎁</div>
+            <div>
+              <div class="rp-name">京东 · 京享红包</div>
+              <div class="rp-sub">JD · RED PACKET</div>
+            </div>
+          </div>
+          <div class="rp-desc">京东双11 全品类红包，每天可领，叠加 PLUS 券更划算。大牌低价主会场同步开放。</div>
+          <button class="rp-btn" id="rpJdBtn">立即领取 ›</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 首页主体：AI 对话 + 今日秒杀 -->
+    <div class="home-grid" id="top">
+      <section class="chat-panel" id="chat">
+        <div class="chat-head">
+          <div class="chat-avatar">🐑</div>
+          <div>
+            <div class="t">羊毛AI · 找券助手</div>
+            <div class="s">说想买啥，券和红包自己找上门</div>
+          </div>
+          <span class="spacer"></span>
+          <span class="mode-chip" id="chatMode">AI 增强</span>
+        </div>
+        <div class="chat-body" id="chatBody"></div>
+        <div class="chat-input">
+          <div class="box">
+            <input id="chatInput" type="text" placeholder="想买什么？也可以直接发淘宝/京东链接，AI 帮你转成优惠链接" autocomplete="off">
+          </div>
+          <button class="send-btn" id="chatSend" title="发送">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <aside class="sk-panel" id="seckill">
+        <div class="sk-head">
+          <span class="t">今日秒杀</span>
+          <span class="tag">0点过夜单</span>
+          <span class="line"></span>
+          <a class="more" href="#feed">更多 ›</a>
+        </div>
+        <div class="sk-list" id="skList"></div>
+      </aside>
+    </div>
+
+    <!-- 好价榜 -->
+    <section class="section" id="feed">
+      <div class="section-head">
+        <h2>好价榜</h2>
+        <span class="section-tag">AI 实时选品 · 10 分钟更新</span>
+        <span class="line"></span>
+      </div>
+      <div class="tabs" id="feedTabs">
+        <button class="tab active" data-type="2">9.9 包邮</button>
+        <button class="tab" data-type="4">聚划算</button>
+        <button class="tab" data-type="1">今日上新</button>
+      </div>
+      <div class="grid" id="feedGrid"></div>
+    </section>
+
+    <!-- 活动会场 -->
+    <section class="section" id="activities">
+      <div class="section-head">
+        <h2>活动会场</h2>
+        <span class="section-tag">双11 全周期 · 实时同步</span>
+        <span class="line"></span>
+      </div>
+      <p class="section-desc">红包和会场入口都在这，点一下直接进。</p>
+      <div class="act-grid" id="actGrid"></div>
+    </section>
+
+    <!-- 工具箱：凑单 + 日历 -->
+    <section class="section" id="toolbox">
+      <div class="section-head">
+        <h2>工具箱</h2>
+        <span class="section-tag">TOOLBOX · 省钱利器</span>
+        <span class="line"></span>
+      </div>
+      <div class="tool-grid">
+        <div class="tool-card" id="coutao">
+          <h3>🧮 凑单工具</h3>
+          <div class="tool-sub">今年双11 淘宝以「官方立减」为主，跨店常见<b>每满 200 减 20</b>（上不封顶，以店铺实际规则为准）。输入门槛和已选金额，自动帮你找刚好补差的商品。</div>
+          <div class="coutao-form">
+            <div class="field">
+              <label>满减门槛（元）</label>
+              <input id="ctTarget" type="number" value="200" min="1">
+            </div>
+            <div class="field">
+              <label>已选金额（元）</label>
+              <input id="ctCurrent" type="number" value="0" min="0">
+            </div>
+            <button class="btn-coupon" style="width:110px;height:36px;flex:none" id="ctBtn">开始凑单</button>
+          </div>
+          <div class="coutao-result" id="ctResult" style="display:none"></div>
+          <div class="coutao-hint" id="ctHint"></div>
+          <div class="grid coutao-list" id="ctGrid"></div>
+        </div>
+        <div class="tool-card" id="calendar">
+          <h3>📅 双11 日历</h3>
+          <div class="tool-sub">全周期节奏一张表，不错过每个省钱节点。</div>
+          <div class="tl-list" id="timeline"></div>
+          <div class="cd-box">
+            <div class="lbl">距离下一个关键节点</div>
+            <div class="val mono" id="heroCd">--</div>
+            <div class="nm" id="heroCdName">--</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer>
+      <div class="foot-grid">
+        <div>
+          <h4>关于羊毛AIHUB</h4>
+          <p>一个全免费的 AI 省钱助手：对话找券、红包直领、好价榜、凑单一键算、双11 日历。所有工具永久免费，无需注册，打开就能用。商品与优惠由 AI 智能选品引擎实时聚合。</p>
+        </div>
+        <div>
+          <h4>数据来源</h4>
+          <ul>
+            <li>AI 智能选品引擎实时聚合</li>
+            <li>商品与活动数据实时抓取</li>
+            <li>AI 对话由大模型驱动</li>
+          </ul>
+        </div>
+        <div>
+          <h4>开源</h4>
+          <ul>
+            <li><a href="https://github.com" target="_blank" rel="noopener">GitHub 仓库</a></li>
+            <li>MIT License</li>
+            <li>欢迎 PR 与 Issue</li>
+          </ul>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <span>羊毛AIHUB · AI 帮你找优惠</span>
+        <span>MIT · OPEN SOURCE · FREE FOREVER</span>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/common.js"></script>
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

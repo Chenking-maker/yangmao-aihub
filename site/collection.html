@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>羊毛集合 — 羊毛AIHUB · AI 帮你找优惠</title>
+<meta name="description" content="羊毛AIHUB 羊毛集合：双11 可领红包、京东京享红包、活动会场，以及美团/饿了么/滴滴/电影票等本地生活优惠（聚合平台对接中）。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23d93832'/><g fill='%23ffffff'><circle cx='17' cy='20' r='6.5'/><circle cx='24' cy='18' r='6'/><circle cx='23' cy='25' r='5.5'/><circle cx='16' cy='26' r='5'/></g><ellipse cx='20' cy='25' rx='5' ry='4.6' fill='%23ffffff'/><circle cx='18.4' cy='24.3' r='0.9' fill='%23222'/><circle cx='21.6' cy='24.3' r='0.9' fill='%23222'/><g><circle cx='33.5' cy='12' r='4.6' fill='%23f6c544' stroke='%23e0a800' stroke-width='0.8'/><text x='33.5' y='14.6' font-size='6' font-weight='700' fill='%239a6a00' text-anchor='middle'>¥</text></g><rect x='4.5' y='4.5' width='13' height='8.6' rx='4' fill='%23111827'/><text x='11' y='10.7' font-size='6' font-weight='700' fill='%235eead4' text-anchor='middle'>AI</text></svg>">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topnav" id="topnav"></header>
+
+<div class="coll-head">
+  <h1>羊毛集合</h1>
+  <p>把所有能领的红包、能省的本地生活都收拢到这一页。双11 红包一键领，外卖打车电影票也能返。</p>
+</div>
+
+<section class="coll-section">
+  <h2>🧧 可领红包 / 活动会场 <span class="tag">双11 全周期 · 实时同步</span></h2>
+  <div class="coll-grid" id="collGrid">
+    <div class="empty-note">正在加载红包会场…</div>
+  </div>
+</section>
+
+<section class="coll-section">
+  <h2>🍜 本地生活优惠 <span class="tag">聚合平台对接中</span></h2>
+  <div class="life-grid" id="lifeGrid"></div>
+  <div class="coll-note">
+    美团 / 饿了么 / 滴滴 / 电影票 / 打车等本地生活优惠正在对接聚合优惠平台。
+    对接开通后，这里可直接领券下单更优惠。当前为占位，开通后自动点亮。
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/common.js"></script>
+<script src="assets/collection.js"></script>
+</body>
+</html>

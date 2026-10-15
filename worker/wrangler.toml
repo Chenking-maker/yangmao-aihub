@@ -1,0 +1,15 @@
+name = "wool-ai-api"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# 部署：npx wrangler deploy
+# 密钥（不要写进这个文件）：
+#   npx wrangler secret put HDK_APIKEY
+#   npx wrangler secret put HDK_PID
+#   npx wrangler secret put HDK_TB_NAME
+#   npx wrangler secret put LLM_API_KEY
+# 本地开发用 .dev.vars（已在 .gitignore 中）
+
+[vars]
+LLM_BASE_URL = "https://api.openai.com/v1"
+LLM_MODEL = "gpt-4o-mini"

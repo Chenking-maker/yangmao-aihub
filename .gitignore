@@ -1,0 +1,22 @@
+# 密钥与本地配置（绝不进 Git）
+worker/.dev.vars
+.dev.vars
+*.local
+
+# 依赖与构建
+node_modules/
+.wrangler/
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
+
+# 调研资料体积大，按需保留
+research/*.zip
+
+# 本地密钥
+tools/.env
+.tmp/
+
+# 内部工作记忆（含运营细节，不进公共仓库）
+.workbuddy/
