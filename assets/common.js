@@ -193,31 +193,54 @@
    * 连不上本地/线上 API 时，在页面顶部显示醒目提示，
    * 避免首页悄悄回退演示数据、线报页显示"网络开小差"造成困惑。 */
   function mountApiBanner() {
-    function show() {
-      var bar = document.getElementById("apiBanner");
+    var bar = null;
+    function ensureBar() {
+      if (bar) return bar;
+      bar = document.getElementById("apiBanner");
       if (!bar) {
         bar = document.createElement("div");
         bar.id = "apiBanner";
         bar.setAttribute("role", "status");
-        bar.style.cssText = "display:block;position:sticky;top:0;z-index:80;margin:0;padding:9px 16px;" +
-          "font:13px/1.55 system-ui,-apple-system,sans-serif;text-align:center;" +
+        bar.style.cssText = "display:none;position:sticky;top:0;z-index:80;margin:0;padding:10px 16px;" +
+          "font:13px/1.6 system-ui,-apple-system,sans-serif;text-align:center;" +
           "background:#fff7ed;color:#9a3412;border-bottom:1px solid #fdba74";
         document.body.insertBefore(bar, document.body.firstChild);
       }
-      bar.textContent = isLocal
-        ? "⚠ AI 选品服务未连接：本地请先启动 API（node tools/dev-api.mjs，端口 8790），再访问 http://127.0.0.1:8080 —— 商品与线报才会显示真实数据。"
-        : "⚠ 服务加载中，如长时间未恢复请刷新页面。";
-      bar.style.display = "block";
+      return bar;
     }
-    function hide() {
-      var bar = document.getElementById("apiBanner");
-      if (bar) bar.style.display = "none";
+    function show(msg, withBtn) {
+      var b = ensureBar();
+      b.innerHTML = "";
+      b.appendChild(document.createTextNode(msg + " "));
+      if (withBtn) {
+        var btn = document.createElement("b");
+        btn.textContent = "点这里刷新 →";
+        btn.style.cssText = "cursor:pointer;text-decoration:underline";
+        btn.onclick = function () { location.reload(true); };
+        b.appendChild(btn);
+      }
+      b.style.display = "block";
+    }
+    function hide() { if (bar) bar.style.display = "none"; }
+    function fail() {
+      show("⚠ 数据服务连接失败，商品和线报暂时显示不了。" +
+        (isLocal
+          ? "本地请先启动 API（node tools/dev-api.mjs，端口 8790）再访问 http://127.0.0.1:8080。"
+          : "可能是网络波动，刷新一下就好；多次刷新不行的话，检查下网络或代理设置。"), true);
     }
     function run() {
       if (!document.body) { document.addEventListener("DOMContentLoaded", run); return; }
-      apiGet("/api/health").then(function (h) {
-        if (h && h.ok) hide(); else show();
-      }).catch(show);
+      var tries = 0;
+      (function attempt() {
+        apiGet("/api/health").then(function (h) {
+          if (h && h.ok) hide();
+          else if (++tries < 3) setTimeout(attempt, 1500);
+          else fail();
+        }).catch(function () {
+          if (++tries < 3) setTimeout(attempt, 1500);
+          else fail();
+        });
+      })();
     }
     run();
   }

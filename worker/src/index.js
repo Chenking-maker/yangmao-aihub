@@ -149,7 +149,7 @@ const SYSTEM_PROMPT = `你是「羊毛AI」的找券助手，一个靠谱、热�
 - 用户问凑单 → 结合满减门槛和已选金额，推荐价格合适的商品
 - 双11节奏：11.01 00:00 付尾款，11.10 20:00 高潮期红包雨，11.12-11.13 返场捡漏`;
 
-/* 部分模型（Qwen 系）会把工具调用混在正文里，常见三种形式：
+/* 兜底解析：个别模型会把工具调用混在正文里，常见三种形式：
  *   ① {{"name":"search_goods","arguments":{...}}}
  *   ② {"name":"search_goods","arguments":{...}}
  *   ③ query = search_goods("纯牛奶") / search_goods(keyword="纯牛奶")
@@ -231,7 +231,7 @@ async function llmChat(env, messages) {
         authorization: "Bearer " + env.LLM_API_KEY
       },
       body: JSON.stringify({
-        model: env.LLM_MODEL || "Qwen/Qwen2.5-7B-Instruct",
+        model: env.LLM_MODEL || "deepseek-ai/DeepSeek-V4.1-Flash",
         messages: chatMessages,
         tools: TOOLS,
         temperature: 0.5,
