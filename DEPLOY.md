@@ -84,12 +84,12 @@ npx wrangler deploy
 ### 7. 拿到 Worker 网址并填进前端
 - `wrangler deploy` 成功后，会打印一个网址，类似：
   **`https://wool-ai-api.<你的子域>.workers.dev`**
-- 打开 `site/assets/common.js`，搜索 `wool-ai-api.workers.dev`，把它换成上面打印的真实网址，保存。
+- 打开 `assets/common.js`，搜索 `wool-ai-api.workers.dev`，把它换成上面打印的真实网址，保存。
 
 ### 8. 重新推送前端（让改动生效）
 ```bash
 cd /d/Workbuddy/羊毛网站
-git add site/assets/common.js
+git add assets/common.js
 git commit -m "chore: 填入 Worker 后端网址"
 git push
 ```
@@ -114,8 +114,8 @@ git push
 
 微信群页面（`wechat.html`）的二维码由你本人上传：
 
-1. 二维码图片放进 `site/qrcodes/`（如 `group1.png`）
-2. 编辑 `site/qrcodes/groups.json`，按格式加一条（字段说明见 `site/qrcodes/README.md`）
+1. 二维码图片放进 `qrcodes/`（如 `group1.png`）
+2. 编辑 `qrcodes/groups.json`，按格式加一条（字段说明见 `qrcodes/README.md`）
 3. `git add . && git commit -m "更新群二维码" && git push`
 
 微信群码 7 天过期，过期换图后改一下 `groups.json` 里的路径再推一次即可。
@@ -127,7 +127,7 @@ git push
 ```
 写代码/改代码
    │
-   ├─ 前端(site/) ──push──▶ GitHub ──Pages──▶ https://用户名.github.io/yangmao-aihub/
+   ├─ 前端(/) ──push──▶ GitHub ──Pages──▶ https://用户名.github.io/yangmao-aihub/
    │                                              │  页面里调用 API_BASE
    └─ 后端(worker/) ─deploy─▶ Cloudflare Worker ─┘（真实商品/线报/转链）
 ```

@@ -104,7 +104,7 @@
         </a>
       </div>
       <a class="side-chip" href="#toolbox"><i></i>双11 倒计时进行中</a>
-      <a class="side-chip" href="about.html">💛 创作者介绍 · 支持羊毛AIHUB</a>
+      <a class="side-chip" href="skill.html">⚡ 羊毛AIHUB · Skill</a>
     </div>
   </aside>
 
@@ -166,20 +166,27 @@
       </a>
     </section>
 
-    <!-- 首页主体：找券入口 + 今日秒杀 -->
+    <!-- 首页主体：AI 找券对话（首页也能聊） + 今日秒杀 -->
     <div class="home-grid" id="top">
-      <section class="chat-cta">
-        <div class="cta-mascot" id="ctaMascot"></div>
-        <div class="cta-body">
-          <div class="cta-title">想买什么，跟羊毛AI 说一声</div>
-          <div class="cta-sub">帮你找隐藏优惠券、领双11 红包、算凑单；发淘宝/京东链接，直接转成你的优惠链接。全免费。</div>
-          <div class="cta-chips">
-            <a class="wchip" href="chat.html?q=%E7%BB%99%E7%88%B8%E5%A6%88%E4%B9%B0%20200%20%E5%85%83%E4%BB%A5%E5%86%85%E7%9A%84%E7%BA%AF%E7%89%9B%E5%A5%B6">给爸妈买 200 元以内的纯牛奶</a>
-            <a class="wchip" href="chat.html?q=9.9%20%E5%8C%85%E9%82%AE%E6%9C%89%E4%BB%80%E4%B9%88%E5%80%BC%E5%BE%97%E4%B9%B0">9.9 包邮有什么值得买</a>
-            <a class="wchip" href="chat.html?q=%E5%8F%8C11%20%E8%B6%85%E7%BA%A7%E7%BA%A2%E5%8C%85%E6%80%8E%E4%B9%88%E9%A2%86">双11 超级红包怎么领</a>
-            <a class="wchip" href="chat.html?q=%E6%BB%A1200%E5%87%8F20%E6%80%8E%E4%B9%88%E5%87%91%E5%8D%95">满200减20怎么凑单</a>
+      <section class="chat-panel home-chat">
+        <div class="chat-head">
+          <div class="chat-avatar">🐑</div>
+          <div>
+            <div class="t">羊毛AI · 找券助手</div>
+            <div class="s">说想买啥，券和红包自己找上门</div>
           </div>
-          <a class="cta-btn" href="chat.html">进入对话找券 ›</a>
+          <span class="spacer"></span>
+          <span class="mode-chip" id="homeChatMode">连接中</span>
+          <a class="more" href="chat.html" title="放大简洁版">全屏 ›</a>
+        </div>
+        <div class="chat-body" id="chatBody"></div>
+        <div class="chat-input">
+          <div class="box">
+            <input id="homeChatInput" type="text" placeholder="想买什么？发淘宝/京东链接也行" autocomplete="off">
+          </div>
+          <button class="send-btn" id="homeChatSend" title="发送">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
         </div>
       </section>
 
@@ -193,6 +200,37 @@
         <div class="sk-list" id="skList"></div>
       </aside>
     </div>
+
+    <!-- 淘金币互动 · 双11瓜分20亿（限时） -->
+    <section class="section coin-band" id="taocoin">
+      <div class="section-head">
+        <h2>💰 淘金币互动</h2>
+        <span class="section-tag">双11 瓜分20亿 · 限时活动</span>
+        <span class="line"></span>
+      </div>
+      <div class="coin-card">
+        <div class="coin-main">
+          <div class="coin-badge">提前攒能量 · 最高赚 <b>1188</b> 加抵金</div>
+          <div class="coin-title">淘宝双11 淘金币 · 瓜分 20 亿</div>
+          <div class="coin-desc">先预约占个位，活动期间每天做任务攒能量（签到 / 浏览 / 下单都算），能量自动兑换成红包抵金，双11 当天一起瓜分。</div>
+          <div class="coin-steps">
+            <div class="coin-step"><i>1</i><b>预约活动</b><span>点下方按钮直达，先占资格</span></div>
+            <div class="coin-step"><i>2</i><b>每日攒能量</b><span>签到 / 浏览 / 下单，天天做天天攒</span></div>
+            <div class="coin-step"><i>3</i><b>能量换红包</b><span>能量自动兑红包抵金，最高 1188 元</span></div>
+          </div>
+          <div class="coin-actions">
+            <button class="coin-btn" id="coinGo">立即预约 · 攒能量 ›</button>
+            <button class="coin-btn ghost" id="coinCopy">复制淘口令</button>
+          </div>
+          <div class="coin-note">能量攒得越早、越多，瓜分时拿得越多 —— 建议现在就预约，每天顺手点一下。</div>
+        </div>
+        <div class="coin-side">
+          <div class="coin-emoji">💰</div>
+          <div class="coin-big">20 亿</div>
+          <div class="coin-side-sub">双11 淘金币奖池</div>
+        </div>
+      </div>
+    </section>
 
     <!-- 好价榜 -->
     <section class="section" id="feed">
@@ -281,6 +319,7 @@
             <li><a href="tipoff.html">实时线报广场</a></li>
             <li><a href="collection.html">羊毛集合</a></li>
             <li><a href="wechat.html">微信交流群</a></li>
+            <li><a href="skill.html">羊毛AIHUB · Skill</a></li>
             <li><a href="about.html">创作者介绍</a></li>
           </ul>
         </div>
@@ -305,6 +344,7 @@
 
 <script src="assets/common.js"></script>
 <script src="assets/data.js"></script>
+<script src="assets/chat-core.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>

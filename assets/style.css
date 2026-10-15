@@ -1118,6 +1118,108 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
 }
 
 /* ============ 响应式 ============ */
+
+/* ---- 首页紧凑对话（与独立页共用核心，仅尺寸更紧凑） ---- */
+.home-chat { min-height: 500px; max-height: 640px; }
+.home-chat .chat-body { padding: 14px 16px; }
+.home-chat .chat-welcome { padding: 20px 14px 16px; }
+.home-chat .chat-welcome .big { font-size: 18px; }
+.home-chat .chat-welcome .sub { font-size: 12.5px; margin-bottom: 14px; }
+.chat-head .more { font-size: 12px; color: var(--red); white-space: nowrap; }
+.chat-head .more:hover { text-decoration: underline; }
+
+/* ---- 淘金币互动（双11 瓜分20亿） ---- */
+.coin-card {
+  display: flex; gap: 22px; align-items: stretch;
+  background: linear-gradient(135deg, #fff9ec 0%, #fff3d6 55%, #ffe9c2 100%);
+  border: 1px solid #f2d9a0; border-radius: var(--r-lg);
+  padding: 24px 26px; box-shadow: var(--shadow-card);
+}
+.coin-main { flex: 1; min-width: 0; }
+.coin-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: #8a5a00;
+  background: rgba(255, 255, 255, 0.72); border: 1px solid #ecc877;
+  border-radius: 99px; padding: 5px 13px; margin-bottom: 12px;
+}
+.coin-badge b { color: var(--red); font-size: 14px; }
+.coin-title { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; color: #4a3200; }
+.coin-desc { font-size: 13px; color: #7a5c1e; margin: 8px 0 16px; max-width: 560px; }
+.coin-steps { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.coin-step {
+  flex: 1; min-width: 150px;
+  background: rgba(255, 255, 255, 0.66); border: 1px solid #f0dcae;
+  border-radius: var(--r-md); padding: 12px 14px;
+}
+.coin-step i {
+  font-style: normal; display: inline-grid; place-items: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--red); color: #fff; font-size: 11px; font-weight: 700;
+  margin-right: 7px;
+}
+.coin-step b { font-size: 13px; color: #4a3200; }
+.coin-step span { display: block; font-size: 12px; color: #8a6c2c; margin-top: 4px; }
+.coin-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.coin-btn {
+  font-size: 13.5px; font-weight: 600; cursor: pointer;
+  color: #fff; background: var(--red); border: 1px solid var(--red);
+  border-radius: var(--r-sm); padding: 10px 20px;
+  transition: background 0.15s, transform 0.15s;
+}
+.coin-btn:hover { background: var(--red-strong); transform: translateY(-1px); }
+.coin-btn.ghost { color: #8a5a00; background: rgba(255,255,255,0.7); border-color: #e5c477; }
+.coin-btn.ghost:hover { background: #fff; }
+.coin-note { font-size: 11.5px; color: #a07c2e; margin-top: 12px; }
+.coin-side {
+  flex: none; width: 168px; align-self: stretch;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: rgba(255, 255, 255, 0.55); border: 1px dashed #e8c887;
+  border-radius: var(--r-md); padding: 18px 10px;
+}
+.coin-emoji { font-size: 34px; }
+.coin-big { font-size: 26px; font-weight: 800; color: var(--red); letter-spacing: -0.02em; }
+.coin-side-sub { font-size: 11.5px; color: #8a6c2c; }
+
+/* ---- Skill 页 ---- */
+.skill-hero {
+  max-width: 880px; margin: 0 auto; padding: 30px 22px 8px; text-align: center;
+}
+.skill-hero .skill-ico { font-size: 44px; }
+.skill-hero h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 10px 0 8px; }
+.skill-hero .sub { font-size: 14px; color: var(--text-2); max-width: 560px; margin: 0 auto; }
+.skill-hero .skill-cmd {
+  display: inline-block; margin-top: 16px; font-family: var(--font-mono);
+  font-size: 14px; color: var(--red); background: var(--red-bg);
+  border: 1px solid var(--red-border); border-radius: var(--r-sm); padding: 9px 18px;
+}
+.skill-body { max-width: 880px; margin: 0 auto; padding: 22px 22px 50px; }
+.skill-feats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 26px; }
+.skill-feat {
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); padding: 18px; box-shadow: var(--shadow-card);
+}
+.skill-feat .ico { font-size: 24px; }
+.skill-feat h3 { font-size: 14.5px; margin: 10px 0 6px; }
+.skill-feat p { font-size: 12.5px; color: var(--text-2); }
+.skill-sec {
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); padding: 22px 24px; margin-bottom: 16px;
+  box-shadow: var(--shadow-card);
+}
+.skill-sec h2 { font-size: 17px; margin-bottom: 12px; }
+.skill-sec ol, .skill-sec ul { padding-left: 20px; display: grid; gap: 9px; }
+.skill-sec li { font-size: 13.5px; color: var(--text-2); line-height: 1.7; }
+.skill-sec li b { color: var(--text); }
+.skill-sec code {
+  font-family: var(--font-mono); font-size: 12px; color: var(--red);
+  background: var(--red-bg); border-radius: 5px; padding: 1.5px 7px;
+}
+.skill-note {
+  font-size: 12.5px; color: var(--text-2); background: var(--surface-2);
+  border: 1px solid var(--hairline); border-left: 3px solid var(--gold);
+  border-radius: var(--r-sm); padding: 12px 16px; line-height: 1.7;
+}
+
 @media (max-width: 1020px) {
   .home-grid { grid-template-columns: 1fr; }
   .chat-panel { min-height: 480px; max-height: 620px; }
@@ -1169,4 +1271,15 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
   .ct-add-row .ct-btn { flex: 1; }
   .ct-row-qty { display: none; }
   .ct-rec-list { grid-template-columns: 1fr; }
+}
+
+/* ---- 新增模块响应式 ---- */
+@media (max-width: 900px) {
+  .coin-card { flex-direction: column; padding: 18px 16px; }
+  .coin-side { width: 100%; flex-direction: row; gap: 10px; padding: 12px; }
+  .coin-emoji { font-size: 24px; }
+  .coin-big { font-size: 20px; }
+  .skill-feats { grid-template-columns: 1fr; }
+  .skill-hero h1 { font-size: 22px; }
+  .home-chat { min-height: 440px; max-height: 560px; }
 }

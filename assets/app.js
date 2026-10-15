@@ -1,7 +1,7 @@
-/* 羊毛AIHUB 首页逻辑 v2.2
- * 依赖 common.js（WOOL.*）：顶栏导航、商品卡、领券、红包打开
- * 对话在独立页 chat.html；凑单工具在 coutao.html；本文件只管首页：
- * 倒计时 / 好价榜 / 今日秒杀 / 活动会场 / 双11 日历 / 侧栏高亮
+/* 羊毛AIHUB 首页逻辑 v2.3
+ * 依赖 common.js（WOOL.*）与 chat-core.js（共享对话核心）
+ * 本文件只管首页：顶栏/Logo / 紧凑对话挂载 / 淘金币互动 / 倒计时 /
+ * 好价榜 / 今日秒杀 / 活动会场 / 双11 日历 / 侧栏高亮
  * 前端统一用「优惠」表述，不出现"返利"；数据来源统一称「AI 智能选品」
  */
 (function () {
@@ -15,7 +15,35 @@
   W.buildTopnav("home");
   var sideLogo = $("sideLogo"); if (sideLogo) sideLogo.innerHTML = W.LOGO_SVG;
   var heroMascot = $("heroMascot"); if (heroMascot) heroMascot.innerHTML = W.LOGO_SVG;
-  var ctaMascot = $("ctaMascot"); if (ctaMascot) ctaMascot.innerHTML = W.LOGO_SVG;
+
+  // 首页紧凑对话（与 chat.html 共用同一核心）
+  if ($("chatBody") && $("homeChatInput")) {
+    W.mountChat({
+      body: "chatBody",
+      input: "homeChatInput",
+      send: "homeChatSend",
+      mode: "homeChatMode",
+      chips: [
+        "给爸妈买 200 元以内的纯牛奶",
+        "9.9 包邮有什么值得买",
+        "双11 超级红包怎么领",
+        "满200减20怎么凑单"
+      ]
+    });
+  }
+
+  // 淘金币互动（双11 瓜分20亿 · 限时）
+  var COIN_URL = "https://m.tb.cn/h.jYavG0k";
+  var COIN_TAO = "17💲N9pITHyybzL£ https://m.tb.cn/h.jYavG0k CA381";
+  var coinGo = $("coinGo");
+  if (coinGo) coinGo.addEventListener("click", function () {
+    W.toast("正在打开淘金币活动…");
+    window.open(COIN_URL, "_blank", "noopener");
+  });
+  var coinCopy = $("coinCopy");
+  if (coinCopy) coinCopy.addEventListener("click", function () {
+    W.copyText(COIN_TAO, "淘口令已复制，打开淘宝自动识别");
+  });
 
   var API_BASE = W.API_BASE;
   function apiGet(p) { return fetch(API_BASE + p).then(function (r) { return r.json(); }); }
