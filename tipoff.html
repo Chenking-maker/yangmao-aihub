@@ -5,21 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>实时线报广场 — 羊毛AIHUB · AI 帮你找优惠</title>
 <meta name="description" content="羊毛AIHUB 实时线报广场：飞猪旅行、淘宝百亿补贴、淘宝实时线报、京东实时线报、宠物线报、美妆线报，全部一键转成你的优惠链接。">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23d93832'/><g fill='%23ffffff'><circle cx='17' cy='20' r='6.5'/><circle cx='24' cy='18' r='6'/><circle cx='23' cy='25' r='5.5'/><circle cx='16' cy='26' r='5'/></g><ellipse cx='20' cy='25' rx='5' ry='4.6' fill='%23ffffff'/><circle cx='18.4' cy='24.3' r='0.9' fill='%23222'/><circle cx='21.6' cy='24.3' r='0.9' fill='%23222'/><g><circle cx='33.5' cy='12' r='4.6' fill='%23f6c544' stroke='%23e0a800' stroke-width='0.8'/><text x='33.5' y='14.6' font-size='6' font-weight='700' fill='%239a6a00' text-anchor='middle'>¥</text></g><rect x='4.5' y='4.5' width='13' height='8.6' rx='4' fill='%23111827'/><text x='11' y='10.7' font-size='6' font-weight='700' fill='%235eead4' text-anchor='middle'>AI</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23d93832'/><g fill='%23ffffff'><circle cx='17' cy='20' r='6.5'/><circle cx='24' cy='18' r='6'/><circle cx='23' cy='25' r='5.5'/><circle cx='16' cy='26' r='4'/></g><ellipse cx='20' cy='25' rx='5' ry='4.6' fill='%23ffffff'/><circle cx='18.4' cy='24.3' r='0.9' fill='%23222'/><circle cx='21.6' cy='24.3' r='0.9' fill='%23222'/><g><circle cx='33.5' cy='12' r='4.6' fill='%23f6c544' stroke='%23e0a800' stroke-width='0.8'/><text x='33.5' y='14.6' font-size='6' font-weight='700' fill='%239a6a00' text-anchor='middle'>¥</text></g><rect x='4.5' y='4.5' width='13' height='8.6' rx='4' fill='%23111827'/><text x='11' y='10.7' font-size='6' font-weight='700' fill='%235eead4' text-anchor='middle'>AI</text></svg>">
 <link rel="stylesheet" href="assets/style.css?v=2.7">
 </head>
 <body>
 <header class="topnav" id="topnav"></header>
 
 <div class="wire-head">
-  <h1>实时线报广场</h1>
-  <p>飞猪旅行 / 淘宝百亿补贴 / 淘宝实时线报 / 京东实时线报 / 宠物线报 / 美妆线报 —— 出现的产品都能一键转成你的优惠链接。</p>
+  <div class="wire-head-main">
+    <div>
+      <h1>实时线报广场</h1>
+      <p>飞猪旅行 / 淘宝百亿补贴 / 淘宝实时线报 / 京东实时线报 / 宠物线报 / 美妆线报 —— 出现的产品都能一键转成你的优惠链接。</p>
+    </div>
+    <div class="wire-head-side">
+      <span class="wire-live" id="wireLive"><i class="wire-dot"></i>实时更新中</span>
+      <button class="wire-refresh" id="wireRefresh" title="刷新线报">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        刷新
+      </button>
+    </div>
+  </div>
 </div>
 
 <div class="wire-tabs" id="wireTabs"></div>
-<div class="wire-list" id="wireList">
-  <div class="empty-note">正在加载线报…</div>
-</div>
+<div class="wire-meta" id="wireMeta"></div>
+<div class="wire-list" id="wireList"></div>
 
 <div class="toast" id="toast"></div>
 

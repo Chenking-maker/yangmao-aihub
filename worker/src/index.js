@@ -16,6 +16,8 @@
  *   POST /api/convert {text}         → 对话转链：用户发的链接 → 优惠归因链接
  *   POST /api/chat   {messages:[...]} → LLM 对话（function calling 自动调搜索/榜单/红包/转链）
  *   POST /api/coupon {itemid,title}  → 生成淘口令（需淘宝授权，未授权时返回领券直链）
+ *   GET  /api/life/business          → 本地生活热门 CPS 业务（云瞻平台，含美团/饿了么/电影/打车等）
+ *   POST /api/life/link {id}         → 获取某个本地生活业务的推广链接（云瞻转链）
  */
 
 import {
@@ -24,6 +26,7 @@ import {
   hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
   convertLink, proxyImage
 } from "./core.js";
+import { yzLifeBusinesses, yzPromotionLink } from "./yunzhan.js";
 
 const CACHE_TTL = 600;
 const memCache = new Map();
@@ -437,6 +440,32 @@ export default {
         const body = await request.json().catch(() => ({}));
         if (!body.itemid) return json({ error: "缺少 itemid" }, 400);
         return json(await hdkRelink(env, body.itemid, body.title));
+      }
+
+      /* ---- 本地生活（云瞻 CPS）：热门业务列表 ---- */
+      if (url.pathname === "/api/life/business") {
+        if (!env.YZ_APP_KEY || !env.YZ_APP_SECRET) {
+          return json({ configured: false, items: [] });
+        }
+        let data = cacheGet("life:biz");
+        if (!data) { data = await yzLifeBusinesses(env); cacheSet("life:biz", data); }
+        return json({ configured: true, items: data || [] });
+      }
+
+      /* ---- 本地生活（云瞻 CPS）：获取某个业务的推广链接 ---- */
+      if (url.pathname === "/api/life/link" && request.method === "POST") {
+        if (!env.YZ_APP_KEY || !env.YZ_APP_SECRET) {
+          return json({ error: "本地生活优惠还没开通" }, 503);
+        }
+        if (!env.YZ_PROMOTION_ID) {
+          return json({ error: "推广位还没配置" }, 503);
+        }
+        const body = await request.json().catch(() => ({}));
+        const id = String(body.id || "").slice(0, 20);
+        if (!id) return json({ error: "缺少业务 id" }, 400);
+        const link = await yzPromotionLink(env, id, 1);
+        if (!link) return json({ error: "这个链接刚才没取到，稍后再试一下" }, 502);
+        return json({ url: link });
       }
 
       return json({ error: "not found" }, 404);

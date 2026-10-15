@@ -315,10 +315,10 @@
       '<a class="side-chip" href="about.html">羊毛AIHUB介绍</a>' +
       '</div></aside>';
 
-    /* 侧栏开关：方向箭头图标（展开=◀ 指向侧栏，点击收起；收起=▶ 点击展开）。
-     * 位置固定在侧栏顶部 logo 行右侧 / 收起时在左上角，均不遮挡顶栏与 logo。 */
-    var CHEV_L = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
-    var CHEV_R = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+    /* 侧栏开关：边缘拉手式——展开时贴在侧栏右边缘（压在侧栏自身上，不挡内容），
+     * 收起时贴屏幕左边缘；细长条 + 方向箭头，垂直居中 */
+    var CHEV_L = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
+    var CHEV_R = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
     var toggle = '<button class="side-toggle" id="sideToggle" title="隐藏侧栏（快捷键 [）" aria-label="切换侧栏">' + CHEV_L + '</button>' +
       '<div class="side-scrim" id="sideScrim"></div>';
 

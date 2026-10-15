@@ -16,6 +16,7 @@ import {
   hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
   convertLink, proxyImage
 } from "../worker/src/core.js";
+import { yzLifeBusinesses, yzPromotionLink } from "../worker/src/yunzhan.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 8790;
@@ -423,6 +424,31 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       if (!body.itemid) return json(res, { error: "缺少 itemid" }, 400);
       return json(res, await hdkRelink(env, body.itemid, body.title));
+    }
+
+    /* ---- 本地生活（云瞻 CPS） ---- */
+    if (url.pathname === "/api/life/business") {
+      if (!env.YZ_APP_KEY || !env.YZ_APP_SECRET) {
+        return json(res, { configured: false, items: [] });
+      }
+      let data = cacheGet("life:biz");
+      if (!data) { data = await yzLifeBusinesses(env); cacheSet("life:biz", data); }
+      return json(res, { configured: true, items: data || [] });
+    }
+
+    if (url.pathname === "/api/life/link" && req.method === "POST") {
+      if (!env.YZ_APP_KEY || !env.YZ_APP_SECRET) {
+        return json(res, { error: "本地生活优惠还没开通" }, 503);
+      }
+      if (!env.YZ_PROMOTION_ID) {
+        return json(res, { error: "推广位还没配置" }, 503);
+      }
+      const body = await readBody(req);
+      const id = String(body.id || "").slice(0, 20);
+      if (!id) return json(res, { error: "缺少业务 id" }, 400);
+      const link = await yzPromotionLink(env, id, 1);
+      if (!link) return json(res, { error: "这个链接刚才没取到，稍后再试一下" }, 502);
+      return json(res, { url: link });
     }
 
     return json(res, { error: "not found" }, 404);

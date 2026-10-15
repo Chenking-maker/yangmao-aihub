@@ -45,7 +45,7 @@ main = "src/index.js"
 
 ---
 
-## 第 3 步 · 设置密钥（5 个，粘一次值按一次回车）
+## 第 3 步 · 设置密钥（8 个，粘一次值按一次回车）
 
 ```bash
 cd /d/Workbuddy/羊毛网站/worker
@@ -55,19 +55,29 @@ npx wrangler secret put HDK_PID         # 好单库 PID（推广位）
 npx wrangler secret put HDK_TB_NAME     # 淘宝授权昵称（淘宝转链归因用）
 npx wrangler secret put JD_UNION_ID     # 京东联盟 ID
 npx wrangler secret put LLM_API_KEY     # 硅基流动 API Key（AI 对话）
+npx wrangler secret put YZ_APP_KEY      # 云瞻平台 app_key（本地生活转链）
+npx wrangler secret put YZ_APP_SECRET   # 云瞻平台 app_secret
+npx wrangler secret put YZ_PROMOTION_ID # 云瞻推广位 ID
 ```
 
 **每个命令执行后会提示 `Enter a secret value:`**——此时打开项目里的 `tools/.env` 文件，把对应变量等号后面的值**复制、粘贴进去、回车**。粘贴时不会显示任何字符，是正常的（防窥屏）。
 
 值都在 `tools/.env` 里，一一对应：
 
-| 命令里的名字 | .env 里的名字 |
-|---|---|
-| HDK_APIKEY | HDK_APIKEY |
-| HDK_PID | HDK_PID |
-| HDK_TB_NAME | HDK_TB_NAME |
-| JD_UNION_ID | JD_UNION_ID |
-| LLM_API_KEY | LLM_API_KEY |
+| 命令里的名字 | .env 里的名字 | 用途 |
+|---|---|---|
+| HDK_APIKEY | HDK_APIKEY | 好单库数据 |
+| HDK_PID | HDK_PID | 淘宝推广位 |
+| HDK_TB_NAME | HDK_TB_NAME | 淘宝转链归因 |
+| JD_UNION_ID | JD_UNION_ID | 京东转链归因 |
+| LLM_API_KEY | LLM_API_KEY | AI 对话（硅基流动） |
+| YZ_APP_KEY | YZ_APP_KEY | 本地生活（美团等）转链 |
+| YZ_APP_SECRET | YZ_APP_SECRET | 同上 |
+| YZ_PROMOTION_ID | YZ_PROMOTION_ID | 云瞻推广位 ID |
+
+> 后 3 个（YZ_*）等云瞻平台的 app_key/app_secret/推广位ID 拿到后再配；不配也不影响其他功能，羊毛集合页会显示"即将上线"。
+>
+> ⚠️ **每次 `wrangler deploy` 后密钥会被清空，必须重新按上面命令再传一遍**（本账号的怪毛病，面板端操作也会清）。
 
 > 💡 也可以不敲命令、全部在网页加：Cloudflare 面板 → **Workers & Pages → yangmao-aihub → Settings → Variables and Secrets → Add**，Name/Value 按上表填，类型选 **Secret**。效果一样。
 

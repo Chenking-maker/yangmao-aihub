@@ -49,29 +49,76 @@
     collGrid.innerHTML = '<div class="empty-note">网络开小差了，刷新页面试试</div>';
   });
 
-  /* ---- 本地生活（聚合优惠平台，占位） ---- */
+  /* ---- 本地生活（云瞻 CPS 平台，实时业务） ---- */
   var lifeGrid = $("lifeGrid");
-  var LIFE = [
-    { name: "美团", sub: "外卖 / 到店", ico: "🍜", desc: "外卖红包、到店套餐优惠", status: "soon" },
-    { name: "饿了么", sub: "外卖", ico: "🥡", desc: "超级会员、红包优惠", status: "soon" },
-    { name: "滴滴出行", sub: "打车", ico: "🚕", desc: "打车券、行程优惠", status: "soon" },
-    { name: "电影票", sub: "购票", ico: "🎬", desc: "影票购票优惠", status: "soon" },
-    { name: "话费充值", sub: "充值", ico: "📱", desc: "话费慢充优惠", status: "soon" },
-    { name: "加油", sub: "车主", ico: "⛽", desc: "加油充值优惠", status: "soon" }
-  ];
-  LIFE.forEach(function (l) {
-    var on = l.status === "on";
-    var el = document.createElement("div");
-    el.className = "life-card";
-    el.innerHTML =
-      '<div class="life-top"><div class="life-ico">' + l.ico + '</div>' +
-      '<div style="flex:1;min-width:0"><div class="life-name">' + l.name + '</div>' +
-      '<div class="life-sub">' + l.sub + '</div></div>' +
-      '<span class="status-badge ' + (on ? "on" : "soon") + '">' + (on ? "已开通" : "对接中") + '</span></div>' +
-      '<div class="life-desc">' + l.desc + '</div>' +
-      '<button class="life-btn ' + (on ? "on" : "") + '"' + (on ? "" : " disabled") + '>' +
-        (on ? "立即领券 ›" : "敬请期待") + '</button>';
-    if (on) el.querySelector(".life-btn").addEventListener("click", function () { window.open(l.url || "#", "_blank", "noopener"); });
-    lifeGrid.appendChild(el);
-  });
+  var lifeSec = lifeGrid ? lifeGrid.closest(".coll-section") : null;
+
+  function lifeFallback() {
+    lifeGrid.innerHTML = "";
+    var LIFE = [
+      { name: "美团", sub: "外卖 / 到店", ico: "🍜", desc: "外卖红包、到店套餐优惠" },
+      { name: "饿了么", sub: "外卖", ico: "🥡", desc: "超级会员、红包优惠" },
+      { name: "电影票", sub: "购票", ico: "🎬", desc: "影票购票优惠" },
+      { name: "打车出行", sub: "打车", ico: "🚕", desc: "打车券、行程优惠" }
+    ];
+    LIFE.forEach(function (l) {
+      var el = document.createElement("div");
+      el.className = "life-card";
+      el.innerHTML =
+        '<div class="life-top"><div class="life-ico">' + l.ico + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="life-name">' + l.name + '</div>' +
+        '<div class="life-sub">' + l.sub + '</div></div>' +
+        '<span class="status-badge soon">即将上线</span></div>' +
+        '<div class="life-desc">' + l.desc + '</div>' +
+        '<button class="life-btn" disabled>敬请期待</button>';
+      lifeGrid.appendChild(el);
+    });
+    if (lifeSec) {
+      var tag = lifeSec.querySelector(".tag");
+      if (tag) tag.textContent = "即将上线";
+      var note = lifeSec.querySelector(".coll-note");
+      if (note) note.textContent = "美团 / 饿了么 / 电影票 / 打车等本地生活优惠正在开通中，上线后可直接领券下单更优惠。";
+    }
+  }
+
+  apiGet("/api/life/business").then(function (r) {
+    if (!r || !r.configured || !r.items || !r.items.length) { lifeFallback(); return; }
+    if (lifeSec) {
+      var tag = lifeSec.querySelector(".tag");
+      if (tag) tag.textContent = "已开通 " + r.items.length + " 项 · 实时同步";
+      var note = lifeSec.querySelector(".coll-note");
+      if (note) note.textContent = "点「获取优惠链接」会自动生成你的专属推广链接，打开后领券下单，价格不变还能拿优惠。";
+    }
+    lifeGrid.innerHTML = "";
+    r.items.forEach(function (b) {
+      var el = document.createElement("div");
+      el.className = "life-card on";
+      el.innerHTML =
+        '<div class="life-top"><div class="life-ico">' + b.icon + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="life-name">' + W.esc(b.name) + '</div>' +
+        '<div class="life-sub">' + W.esc(b.cat) + (b.commission ? " · 佣金 " + W.esc(b.commission) : "") + '</div></div>' +
+        '<span class="status-badge on">可领</span></div>' +
+        '<div class="life-desc">点击生成专属优惠链接，领券下单更划算</div>' +
+        '<button class="life-btn on">获取优惠链接 ›</button>';
+      el.querySelector(".life-btn").addEventListener("click", function () {
+        var btn = el.querySelector(".life-btn");
+        btn.disabled = true;
+        btn.textContent = "生成中…";
+        apiPost("/api/life/link", { id: b.id }).then(function (res) {
+          btn.disabled = false;
+          btn.textContent = "获取优惠链接 ›";
+          if (res && res.url) {
+            window.open(res.url, "_blank", "noopener");
+          } else {
+            W.toast((res && res.error) || "没取到链接，稍后再试");
+          }
+        }).catch(function () {
+          btn.disabled = false;
+          btn.textContent = "获取优惠链接 ›";
+          W.toast("网络开小差了，再试一次");
+        });
+      });
+      lifeGrid.appendChild(el);
+    });
+  }).catch(lifeFallback);
 })();

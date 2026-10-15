@@ -1,4 +1,4 @@
-/* 羊毛AIHUB · 实时线报广场 v2.1
+/* 羊毛AIHUB · 实时线报广场 v2.7（排版重设计）
  * 数据源：好单库线报接口（前端统一呈现为「AI 线报」）/ 素材圈子（宠物/美妆）
  * 每条线报的产品可一键转成用户自己的优惠链接
  */
@@ -14,26 +14,30 @@
 
   // 固定的「素材类」线报（宠物/美妆）走 material 通道
   var TABS = [
-    { key: "all", label: "全部", src: "wire", q: "0" },
-    { key: "fz", label: "飞猪旅行", src: "wire", q: "10367" },
-    { key: "by", label: "淘宝百亿补贴", src: "wire", q: "10005" },
-    { key: "tb", label: "淘宝实时线报", src: "wire", q: "10003" },
-    { key: "jd", label: "京东实时线报", src: "wire", q: "10004" },
-    { key: "pet", label: "宠物线报", src: "material", q: "宠物" },
-    { key: "beauty", label: "美妆线报", src: "material", q: "美妆" }
+    { key: "all", label: "全部", icon: "🧩", src: "wire", q: "0" },
+    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "10367" },
+    { key: "by", label: "淘宝百亿补贴", icon: "🛒", src: "wire", q: "10005" },
+    { key: "tb", label: "淘宝实时线报", icon: "📦", src: "wire", q: "10003" },
+    { key: "jd", label: "京东实时线报", icon: "🏷️", src: "wire", q: "10004" },
+    { key: "pet", label: "宠物线报", icon: "🐾", src: "material", q: "宠物" },
+    { key: "beauty", label: "美妆线报", icon: "💄", src: "material", q: "美妆" }
   ];
 
   var tabsEl = $("wireTabs");
   var listEl = $("wireList");
+  var metaEl = $("wireMeta");
+  var refreshBtn = $("wireRefresh");
   var current = "all";
+  var loading = false;
 
-  // 渲染 tabs
+  // 渲染 pill tabs
   TABS.forEach(function (t) {
     var b = document.createElement("button");
     b.className = "wire-tab" + (t.key === current ? " active" : "");
-    b.textContent = t.label;
+    b.innerHTML = '<span class="wire-tab-ico">' + t.icon + '</span>' + t.label;
     b.setAttribute("data-key", t.key);
     b.addEventListener("click", function () {
+      if (t.key === current || loading) return;
       tabsEl.querySelectorAll(".wire-tab").forEach(function (x) { x.classList.remove("active"); });
       b.classList.add("active");
       current = t.key;
@@ -51,6 +55,7 @@
   function platformClass(pf) {
     if (pf === "京东") return "jd";
     if (pf === "飞猪") return "fz";
+    if (pf === "淘宝" || pf === "天猫") return "tb";
     return "";
   }
 
@@ -74,7 +79,7 @@
 
     var imgsHtml = (it.images && it.images.length)
       ? '<div class="wire-imgs">' + it.images.map(function (u) {
-          return '<img src="' + API_BASE + '/api/img?u=' + encodeURIComponent(u) + '" referrerpolicy="no-referrer" alt="">';
+          return '<img loading="lazy" src="' + API_BASE + '/api/img?u=' + encodeURIComponent(u) + '" referrerpolicy="no-referrer" alt="">';
         }).join("") + '</div>'
       : "";
 
@@ -122,27 +127,73 @@
     return card;
   }
 
+  /* ---- 骨架屏 ---- */
+  function showSkeleton() {
+    listEl.innerHTML = "";
+    for (var i = 0; i < 4; i++) {
+      var sk = document.createElement("div");
+      sk.className = "wire-sk";
+      sk.innerHTML =
+        '<div class="wire-sk-top"><span class="wire-sk-badge"></span><span class="wire-sk-line w40"></span></div>' +
+        '<div class="wire-sk-line w90"></div><div class="wire-sk-line w75"></div><div class="wire-sk-line w60"></div>' +
+        '<div class="wire-sk-imgs"><span></span><span></span><span></span></div>' +
+        '<div class="wire-sk-btn"></div>';
+      listEl.appendChild(sk);
+    }
+  }
+
+  function showEmpty(tab) {
+    var msg = tab.src === "material"
+      ? tab.label + "：暂无推荐好物，稍后再来看看"
+      : tab.label + "：暂时没有新线报，换分类看看";
+    listEl.innerHTML =
+      '<div class="wire-empty">' +
+        '<div class="wire-empty-ico">' + tab.icon + '</div>' +
+        '<div class="wire-empty-text">' + msg + '</div>' +
+        '<button class="wire-empty-btn" id="wireEmptyBtn">看看全部线报</button>' +
+      '</div>';
+    var eb = $("wireEmptyBtn");
+    if (eb) eb.addEventListener("click", function () {
+      tabsEl.querySelector('[data-key="all"]').click();
+    });
+  }
+
+  function setRefreshing(on) {
+    refreshBtn.classList.toggle("spinning", on);
+    refreshBtn.disabled = on;
+  }
+
   function loadList(tab) {
-    listEl.innerHTML = '<div class="empty-note">正在加载「' + tab.label + '」线报…</div>';
+    loading = true;
+    setRefreshing(true);
+    metaEl.textContent = "";
+    showSkeleton();
     var url = tab.src === "material"
       ? "/api/wire?sub=material&tag=" + encodeURIComponent(tab.q)
       : "/api/wire?sub=list&type=" + encodeURIComponent(tab.q) + "&page=1";
     apiGet(url).then(function (d) {
+      loading = false;
+      setRefreshing(false);
       listEl.innerHTML = "";
       var items = (d && d.items) || [];
-      if (!items.length) {
-        if (tab.src === "material") {
-          listEl.innerHTML = '<div class="empty-note">' + tab.label + '：暂无推荐好物，稍后再来看看 ›</div>';
-        } else {
-          listEl.innerHTML = '<div class="empty-note">' + tab.label + '：暂时没有新线报，换分类看看 ›</div>';
-        }
-        return;
-      }
+      if (!items.length) { showEmpty(tab); return; }
+      metaEl.innerHTML = '当前分类共 <b>' + items.length + '</b> 条线报 · 数据实时同步';
       items.forEach(function (it) { listEl.appendChild(renderWireItem(it)); });
     }).catch(function () {
-      listEl.innerHTML = '<div class="empty-note">网络开小差了，刷新页面试试</div>';
+      loading = false;
+      setRefreshing(false);
+      listEl.innerHTML =
+        '<div class="wire-empty">' +
+          '<div class="wire-empty-ico">📡</div>' +
+          '<div class="wire-empty-text">网络开小差了，刷新页面试试</div>' +
+        '</div>';
     });
   }
+
+  refreshBtn.addEventListener("click", function () {
+    var tab = TABS.filter(function (t) { return t.key === current; })[0];
+    loadList(tab);
+  });
 
   loadList(TABS[0]);
 })();
