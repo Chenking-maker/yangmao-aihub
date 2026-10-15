@@ -1,6 +1,7 @@
 /* 羊毛AIHUB · 跨页面共享逻辑
- * 提供：API 配置、Toast、主题切换、顶部导航（首页/线报广场/羊毛集合 + 淘宝超级红包入口）、红包打开
- * 所有页面先引入本文件，再引入各自的业务脚本。佣金字段从不经前端。
+ * 提供：API 配置、Toast、顶部导航（超级红包/AI找券/首页/线报广场/羊毛集合）、
+ *       商品卡与领券（首页/线报/凑单/消灭小红包共用）、红包打开、服务连通性提示
+ * 所有页面先引入本文件，再引入各自的业务脚本。优惠字段从前端可见，佣金字段从不经前端。
  */
 (function (global) {
   "use strict";
@@ -39,10 +40,6 @@
     '<path d="M10.4 12.4 l-1.2 3.4 1.9 -0.7 -1 3.4" fill="none" stroke="#ffd23f" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>' +
     '</svg>';
 
-  var THEME_ICON =
-    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
-    '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-
   var toastTimer = null;
   function toast(msg) {
     var t = $("toast");
@@ -63,22 +60,80 @@
     });
   }
 
-  /* ---- 主题 ---- */
-  function applyTheme(t) {
-    document.documentElement.setAttribute("data-theme", t);
-var lb = $("themeLabel"); if (lb) lb.textContent = t === "light" ? "深色" : "浅色";
-    var lbs = $("themeLabelSide"); if (lbs) lbs.textContent = t === "light" ? "深色" : "浅色";
-    try { localStorage.setItem("wool-theme", t); } catch (e) {}
-  }
-  var saved = null;
-  try { saved = localStorage.getItem("wool-theme"); } catch (e) {}
-  applyTheme(saved || "light");
+  /* ================= 商品卡 / 领券（多页面共用） ================= */
 
-  function onThemeClick() {
-    applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
+  function fmtSales(n) { return n >= 10000 ? (n / 10000).toFixed(1).replace(/\.0$/, "") + " 万" : String(n); }
+  function saveOf(p) { return Math.max(0, (Number(p.price) || 0) - (Number(p.endPrice) || 0)).toFixed(1).replace(/\.0$/, ""); }
+  function picUrl(p) {
+    if (!p.pic) return "";
+    return API_BASE + "/api/img?u=" + encodeURIComponent(p.pic);
   }
 
-  /* ---- 顶部导航 ---- */
+  function productCard(p) {
+    var el = document.createElement("div");
+    el.className = "pcard";
+    var imgInner = p.pic
+      ? '<img src="' + picUrl(p) + '" data-direct="' + p.pic + '" referrerpolicy="no-referrer" alt="">'
+      : (p.icon || "图");
+    var save = Number(p.coupon) > 0 ? "省 ¥" + p.coupon : "省 ¥" + saveOf(p);
+    el.innerHTML =
+      '<div class="pcard-top">' +
+        '<div class="pcard-img">' + imgInner + '</div>' +
+        '<div style="min-width:0;flex:1">' +
+          '<div class="pcard-title">' + esc(p.title) + '</div>' +
+          '<div class="pcard-meta">' + esc(p.shop || "品质店铺") + ' · 已售 ' + fmtSales(p.sales || 0) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pcard-price">' +
+        '<span class="price-now">' + p.endPrice + '</span>' +
+        '<span class="price-old">¥' + p.price + '</span>' +
+        (Number(p.coupon) > 0 ? '<span class="badge-coupon">券 ¥' + p.coupon + '</span>' : "") +
+        '<span class="save-text">' + save + '</span>' +
+      '</div>' +
+      '<div class="pcard-foot">' +
+        '<button class="btn-coupon act-coupon">领券购买</button>' +
+        '<button class="btn-copy act-copy">淘口令</button>' +
+      '</div>';
+    el.querySelector(".act-coupon").addEventListener("click", function () { openCoupon(p); });
+    el.querySelector(".act-copy").addEventListener("click", function () { copyTaoword(p); });
+    var img = el.querySelector(".pcard-img img");
+    if (img) {
+      var retried = false;
+      img.addEventListener("error", function () {
+        var direct = img.getAttribute("data-direct");
+        if (!retried && direct) { retried = true; img.removeAttribute("referrerpolicy"); img.src = direct; }
+        else { img.remove(); el.querySelector(".pcard-img").textContent = p.icon || "图"; }
+      });
+    }
+    return el;
+  }
+
+  /* 领券 / 淘口令：统一走 /api/coupon（ratesurl 转链，带归因参数） */
+  function openCoupon(p) {
+    if (p.couponurl) { window.open(p.couponurl, "_blank", "noopener"); return; }
+    if (p.taoword) { copyText(p.taoword, "淘口令已复制，打开淘宝自动识别"); return; }
+    if (!p.id) { toast("演示数据，暂无可领链接"); return; }
+    apiPost("/api/coupon", { itemid: p.id, title: p.title }).then(function (r) {
+      if (r && r.data && (r.data.coupon_click_url || r.data.item_url)) {
+        window.open(r.data.coupon_click_url || r.data.item_url, "_blank", "noopener");
+      } else if (r && r.url) {
+        window.open(r.url, "_blank", "noopener");
+      } else { copyText(p.title, "已复制标题，去淘宝搜索即可领券"); }
+    }).catch(function () { copyText(p.title, "已复制标题，去淘宝搜索即可领券"); });
+  }
+  function copyTaoword(p) {
+    if (p.taoword) { copyText(p.taoword, "淘口令已复制，打开淘宝自动识别"); return; }
+    if (!p.id) { toast("演示数据，暂无可复制口令"); return; }
+    apiPost("/api/coupon", { itemid: p.id, title: p.title }).then(function (r) {
+      var d = r && r.data ? r.data : {};
+      if (d.taoword) copyText(d.taoword, "淘口令已复制，打开淘宝自动识别");
+      else if (d.coupon_click_url) copyText(d.coupon_click_url, "领券链接已复制");
+      else if (r && r.url) copyText(r.url, "领券链接已复制");
+      else copyText(p.title, "口令生成中，已复制标题先去淘宝搜索");
+    }).catch(function () { copyText(p.title, "口令生成中，已复制标题先去淘宝搜索"); });
+  }
+
+  /* ================= 顶部导航 ================= */
   function buildTopnav(active) {
     var nav = $("topnav");
     if (!nav) return;
@@ -86,22 +141,16 @@ var lb = $("themeLabel"); if (lb) lb.textContent = t === "light" ? "深色" : "�
       '<a class="nav-brand" href="index.html">' + LOGO_SVG + '<span>羊毛AIHUB</span></a>' +
       '<nav class="nav-links">' +
         '<a class="rp-mini" id="rpMini" title="领取淘宝双11超级红包">🧧 超级红包</a>' +
+        '<a href="chat.html" class="' + (active === "chat" ? "active" : "") + '">AI 找券</a>' +
         '<a href="index.html" class="' + (active === "home" ? "active" : "") + '">首页</a>' +
         '<a href="tipoff.html" class="' + (active === "tipoff" ? "active" : "") + '">线报广场</a>' +
         '<a href="collection.html" class="' + (active === "coll" ? "active" : "") + '">羊毛集合</a>' +
-        '<button class="nav-theme" id="themeToggle" title="切换主题">' + THEME_ICON + '<span id="themeLabel">深色</span></button>' +
       '</nav>';
     var rmp = $("rpMini");
     if (rmp) rmp.addEventListener("click", function () { openTbRedpacket(); });
-    var btn = $("themeToggle");
-    if (btn) btn.addEventListener("click", onThemeClick);
   }
 
-  // 侧栏主题键（与顶栏共用）
-  var sideTheme = $("themeToggleSide");
-  if (sideTheme) sideTheme.addEventListener("click", onThemeClick);
-
-  /* ---- 红包 / 会场 ---- */
+  /* ================= 红包 / 会场 ================= */
   function findActivity(list, kw) {
     for (var i = 0; i < list.length; i++) {
       if (list[i].name.indexOf(kw) > -1) return list[i];
@@ -178,7 +227,9 @@ var lb = $("themeLabel"); if (lb) lb.textContent = t === "light" ? "深色" : "�
     toast: toast, copyText: copyText, esc: esc, LOGO_SVG: LOGO_SVG,
     buildTopnav: buildTopnav, openActivity: openActivity,
     openTbRedpacket: openTbRedpacket, openJdRedpacket: openJdRedpacket,
-    findActivity: findActivity, onThemeClick: onThemeClick,
+    findActivity: findActivity,
+    fmtSales: fmtSales, saveOf: saveOf, picUrl: picUrl,
+    productCard: productCard, openCoupon: openCoupon, copyTaoword: copyTaoword,
     mountApiBanner: mountApiBanner
   };
 

@@ -11,13 +11,16 @@
  *   POST /api/redpacket {activityId|activityUrl,title} → 会场转链（红包归因链接）
  *   GET  /api/wire?type=&page=       → 实时线报广场（分类+列表）
  *   GET  /api/material?tag=宠物      → 宠物/美妆线报（素材圈好物）
- *   POST /api/convert {text}         → 对话转链：用户发的链接 → 返利归因链接
+ *   GET  /api/xhd                    → 消灭小红包专区（9.9 以下好物）
+ *   POST /api/parse {text}           → 凑单工具：解析粘贴的链接/口令 → 商品信息
+ *   POST /api/convert {text}         → 对话转链：用户发的链接 → 优惠归因链接
  *   POST /api/chat   {messages:[...]} → LLM 对话（function calling 自动调搜索/榜单/红包/转链）
  *   POST /api/coupon {itemid,title}  → 生成淘口令（需淘宝授权，未授权时返回领券直链）
  */
 
 import {
-  normalizeList, hdkSearch, hdkFeed, hdkRelink, hdkActivityList, hdkConference,
+  normalizeList, hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
+  hdkActivityList, hdkConference,
   hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
   convertLink, proxyImage
 } from "./core.js";
@@ -140,11 +143,78 @@ const SYSTEM_PROMPT = `你是「羊毛AI」的找券助手，一个靠谱、热�
 - 像朋友聊天，不端着，不写长篇大论，不堆术语
 - 推荐商品时说清楚：叫什么、券后多少钱、券多大、销量如何，最多 3 款
 - 不编造商品；接口没数据就直说，并给换关键词的建议
-- 用户要红包 → 调 get_redpacket 拿到链接后，直接把链接和领取方式发给用户
+- 用户要红包、问红包怎么领/哪里领 → 必须调 get_redpacket（用户没给关键词就用「超级红包」），拿到链接后直接把链接和领取方式发给用户，不要反问
 - 用户想买东西 → 调 search_goods；用户要榜单/随便看看 → 调 get_feed
 - 用户发来链接/口令要转链 → 调 convert_link，把转好的优惠链接和有什么券告诉用户
 - 用户问凑单 → 结合满减门槛和已选金额，推荐价格合适的商品
 - 双11节奏：11.01 00:00 付尾款，11.10 20:00 高潮期红包雨，11.12-11.13 返场捡漏`;
+
+/* 部分模型（Qwen 系）会把工具调用混在正文里，常见三种形式：
+ *   ① {{"name":"search_goods","arguments":{...}}}
+ *   ② {"name":"search_goods","arguments":{...}}
+ *   ③ query = search_goods("纯牛奶") / search_goods(keyword="纯牛奶")
+ * 这里统一解析出来当真正的工具调用用；同时清理最终回复里残留的调用片段。 */
+const INLINE_TOOL_NAMES = ["search_goods", "get_feed", "get_redpacket", "convert_link"];
+const INLINE_TOOL_FIRST_ARG = { search_goods: "keyword", get_feed: "type", get_redpacket: "keyword", convert_link: "content" };
+
+function parseCallArgs(name, inner) {
+  inner = (inner || "").trim();
+  if (inner.indexOf("{") === 0) {
+    try { return JSON.parse(inner); } catch (e) {}
+  }
+  const args = {};
+  const kv = inner.match(/(\w+)\s*=\s*["']([^"']*)["']/g);
+  if (kv) {
+    kv.forEach((p) => {
+      const m = p.match(/(\w+)\s*=\s*["']([^"']*)["']/);
+      if (m) args[m[1]] = m[2];
+    });
+    if (Object.keys(args).length) return args;
+  }
+  const pos = inner.match(/^["']([^"']*)["']$/);
+  if (pos) args[INLINE_TOOL_FIRST_ARG[name] || "keyword"] = pos[1];
+  return args;
+}
+
+function parseInlineToolCall(text) {
+  const s = String(text || "");
+  const m = s.match(/\{\{\s*"name"\s*:\s*"([a-z_]+)"\s*,\s*"arguments"\s*:\s*(\{[\s\S]*?\})\s*\}\}/)
+    || s.match(/\{\s*"name"\s*:\s*"([a-z_]+)"\s*,\s*"arguments"\s*:\s*(\{[\s\S]*?\})\s*\}/);
+  if (m) {
+    let args = {};
+    try { args = JSON.parse(m[2]); } catch (e) {}
+    return { name: m[1], args: args };
+  }
+  for (const name of INLINE_TOOL_NAMES) {
+    const fm = s.match(new RegExp("(?:=\\s*|\\b)" + name + "\\s*[(（]([^)）]*)[)）]"));
+    if (fm) return { name: name, args: parseCallArgs(name, fm[1]) };
+  }
+  return null;
+}
+function cleanReply(t) {
+  return String(t || "")
+    .replace(/\{\{[\s\S]*?\}\}/g, "")
+    .replace(/(?:query\s*=\s*|调用\s*|call\s+)?(?:search_goods|get_feed|get_redpacket|convert_link)\s*[(（][^)）]*[)）]/g, "")
+    .trim();
+}
+
+/* 规整模型返回的工具调用：补齐 type=function、arguments 转字符串、剔除畸形项。
+ * 上游对 tool_calls 校验严格（缺 type / 空数组都会 400），必须先净化再回传历史。 */
+function normalizeToolCalls(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  list.forEach((c, i) => {
+    if (!c || !c.function || typeof c.function.name !== "string") return;
+    let args = c.function.arguments;
+    if (args && typeof args !== "string") args = JSON.stringify(args);
+    out.push({
+      id: c.id || ("call_" + Date.now() + "_" + i),
+      type: "function",
+      function: { name: c.function.name, arguments: args || "{}" }
+    });
+  });
+  return out;
+}
 
 async function llmChat(env, messages) {
   const base = env.LLM_BASE_URL || "https://api.siliconflow.cn/v1";
@@ -169,18 +239,32 @@ async function llmChat(env, messages) {
         enable_thinking: false
       })
     });
-    if (!res.ok) throw new Error("LLM error " + res.status);
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      throw new Error("LLM error " + res.status + " " + errBody.slice(0, 300));
+    }
     const data = await res.json();
     const msg = data.choices[0].message;
     chatMessages.push(msg);
 
-    if (!msg.tool_calls) {
-      // 兜底：个别情况下答案会落在 reasoning_content
-      const reply = (msg.content || "").trim() || (msg.reasoning_content || "").trim();
+    // 兜底 1：模型把工具调用写进正文（{{"name":...,"arguments":...}}）时，解析出来当真调用用
+    let toolCalls = normalizeToolCalls(msg.tool_calls);
+    if (!toolCalls.length && msg.content) {
+      const inline = parseInlineToolCall(msg.content);
+      if (inline) {
+        toolCalls = [{ id: "call_inline_" + round, type: "function", function: { name: inline.name, arguments: JSON.stringify(inline.args) } }];
+      }
+    }
+    if (toolCalls.length) msg.tool_calls = toolCalls;
+    else delete msg.tool_calls;
+
+    if (!toolCalls.length) {
+      // 兜底 2：个别情况下答案会落在 reasoning_content
+      const reply = cleanReply((msg.content || "").trim() || (msg.reasoning_content || "").trim());
       return { reply: reply || "这个我没接上，换个说法再试试？", products, redpackets, links };
     }
 
-    for (const call of msg.tool_calls) {
+    for (const call of toolCalls) {
       let args = {};
       try { args = JSON.parse(call.function.arguments || "{}"); } catch (e) {}
       let cards = [];
@@ -302,7 +386,26 @@ export default {
         return json(data);
       }
 
-      /* ---- 对话转链：用户发链接 → 返利归因链接 ---- */
+      /* ---- 消灭小红包专区 ---- */
+      if (url.pathname === "/api/xhd") {
+        if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
+        let data = cacheGet("xhd");
+        if (!data) { data = await hdkXhdList(env); cacheSet("xhd", data); }
+        return json(data);
+      }
+
+      /* ---- 凑单工具：解析用户粘贴的链接/口令 ---- */
+      if (url.pathname === "/api/parse" && request.method === "POST") {
+        if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
+        const body = await request.json().catch(() => ({}));
+        const text = String(body.text || "").slice(0, 500);
+        if (!text) return json({ error: "缺少 text 参数" }, 400);
+        const r = await parsePastedLink(env, text);
+        if (!r) return json({ error: "没识别出链接或口令，换一个试试" }, 400);
+        return json(r);
+      }
+
+      /* ---- 对话转链：用户发链接 → 优惠归因链接 ---- */
       if (url.pathname === "/api/convert" && request.method === "POST") {
         if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
         const body = await request.json().catch(() => ({}));

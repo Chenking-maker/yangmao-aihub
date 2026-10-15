@@ -47,6 +47,30 @@ export async function hdkFeed(env, type, back) {
   return normalizeList(await res.json());
 }
 
+/* 商品详情：按商品 ID 取标题/价格/主图（凑单工具解析用户粘贴的链接用） */
+export async function hdkItemDetail(env, itemid) {
+  var url = HDK_BASE + "/item_detail?apikey=" + encodeURIComponent(env.HDK_APIKEY) +
+    "&itemid=" + encodeURIComponent(itemid);
+  var res = await fetch(url);
+  var json = await res.json();
+  var d = json && json.data;
+  if (!d) return null;
+  if (Array.isArray(d)) d = d[0];
+  if (!d || !d.itemid) return null;
+  return normalizeProduct(d);
+}
+
+/* 消灭小红包：9.9 包邮榜里券后价低于 9.9 的商品（红包可直接抵掉的那种） */
+export async function hdkXhdList(env) {
+  var url = HDK_BASE + "/column?apikey=" + encodeURIComponent(env.HDK_APIKEY) +
+    "&type=2&back=50";
+  var res = await fetch(url);
+  var list = normalizeList(await res.json());
+  return list
+    .filter(function (p) { return Number(p.endPrice) > 0 && Number(p.endPrice) < 9.9; })
+    .sort(function (a, b) { return Number(a.endPrice) - Number(b.endPrice); });
+}
+
 /* 商品转链：无 tb_name 时也能生成领券直链；有 tb_name 则归因到推广位。
  * 佣金率字段（max_commission_rate 等）在此剥离，绝不出现在返回值里。 */
 export async function hdkRelink(env, itemid, title) {
@@ -247,7 +271,7 @@ export async function hdkMaterialItems(communityId, page) {
   });
 }
 
-/* ================= 对话转链：用户发链接 → 返利链接 ================= */
+/* ================= 对话转链：用户发链接 → 优惠归因链接 ================= */
 
 /**
  * 从用户消息里提取可转链的物料：
@@ -288,6 +312,40 @@ export function extractLinkMaterial(text) {
     return { platform: "淘宝", materialId: "", couponUrl: "", kind: "tb-unknown" };
   }
   return null;
+}
+
+/**
+ * 凑单工具：解析用户粘贴的淘宝链接/口令 → 商品信息（加入凑单列表）。
+ * 淘宝走 item_detail；京东详情需官方授权，降级为手动补价条目。
+ * 返回 normalizeProduct 结果，或 { manual:true, ... } 待手补，或 null。
+ */
+export async function parsePastedLink(env, text) {
+  var m = extractLinkMaterial(text);
+  if (!m) return null;
+
+  if (m.kind === "jd") {
+    return {
+      platform: "京东",
+      manual: true,
+      id: m.materialId || "",
+      title: "京东商品",
+      note: "京东商品详情需官方授权，补一下到手价就能一起凑"
+    };
+  }
+  if (!m.materialId || m.kind === "tb-unknown") {
+    return {
+      platform: m.platform || "淘宝",
+      manual: true,
+      id: "",
+      title: "",
+      note: "没识别出商品 ID，换个链接或用手动添加"
+    };
+  }
+  var p = await hdkItemDetail(env, m.materialId);
+  if (!p) {
+    return { platform: "淘宝", manual: true, id: m.materialId, title: "", note: "这个商品没查到详情，可能下架了" };
+  }
+  return p;
 }
 
 /**

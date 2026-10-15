@@ -33,6 +33,9 @@ git remote add origin https://github.com/你的用户名/yangmao-aihub.git
 git push -u origin master
 ```
 
+> 仓库已经建好并推送过一次（`https://github.com/Chenking-maker/yangmao-aihub`），
+> 以后更新代码只需要：`git add . && git commit -m "更新说明" && git push`。
+
 > 如果提示输入用户名/密码：用户名填 GitHub 用户名，**密码不是登录密码**，而是
 > GitHub → Settings → Developer settings → Personal access tokens → Tokens(classic) → Generate new token，
 > 勾选 `repo` 权限后生成的那串 `ghp_...`。把它当密码粘贴。
@@ -81,11 +84,7 @@ npx wrangler deploy
 ### 7. 拿到 Worker 网址并填进前端
 - `wrangler deploy` 成功后，会打印一个网址，类似：
   **`https://wool-ai-api.<你的子域>.workers.dev`**
-- 打开 `site/assets/common.js`，找到第 12 行：
-  ```js
-  : "https://wool-ai-api.workers.dev"; // TODO: Worker 部署后替换为真实域名
-  ```
-  把 `https://wool-ai-api.workers.dev` 换成上面打印的真实网址，保存。
+- 打开 `site/assets/common.js`，搜索 `wool-ai-api.workers.dev`，把它换成上面打印的真实网址，保存。
 
 ### 8. 重新推送前端（让改动生效）
 ```bash
@@ -106,7 +105,20 @@ git push
 | 页面顶部显示「AI 选品服务未连接」 | 后端 Worker 没部署，或 `common.js` 里的 Worker 网址没填对。做完第二部分的 5-8 步。 |
 | 本地想先看效果 | 两个服务都开着：`node tools/dev-api.mjs`（API，8790）+ 静态页 8080，访问 http://127.0.0.1:8080 |
 | `git push` 要密码 | 用 GitHub Personal access token（`ghp_...`），不是账号密码，见第 3 步 |
+| `git push` 连不上 | 检查你自己的代理（Clash 等）是否在跑；git 走的是系统代理 |
 | 以后改了代码怎么更新 | 在项目目录执行 `git add . && git commit -m "更新" && git push`，Pages 会自动重新发布 |
+
+---
+
+## 附：上传微信群二维码
+
+微信群页面（`wechat.html`）的二维码由你本人上传：
+
+1. 二维码图片放进 `site/qrcodes/`（如 `group1.png`）
+2. 编辑 `site/qrcodes/groups.json`，按格式加一条（字段说明见 `site/qrcodes/README.md`）
+3. `git add . && git commit -m "更新群二维码" && git push`
+
+微信群码 7 天过期，过期换图后改一下 `groups.json` 里的路径再推一次即可。
 
 ---
 

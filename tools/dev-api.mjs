@@ -11,7 +11,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  hdkSearch, hdkFeed, hdkRelink, hdkActivityList, hdkConference,
+  hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
+  hdkActivityList, hdkConference,
   hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
   convertLink, proxyImage
 } from "../worker/src/core.js";
@@ -104,7 +105,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "convert_link",
-      description: "用户发来淘宝/京东商品链接或淘口令想转成自己的返利链接时调用。传入用户消息原文，返回转链结果（归因链接+淘口令+优惠券信息）",
+      description: "用户发来淘宝/京东商品链接或淘口令想转成自己的优惠链接时调用。传入用户消息原文，返回转链结果（优惠链接+淘口令+优惠券信息）",
       parameters: {
         type: "object",
         properties: { content: { type: "string", description: "用户发的原文（含链接或口令）" } },
@@ -114,7 +115,7 @@ const TOOLS = [
   }
 ];
 
-const SYSTEM_PROMPT = `你是「羊毛AI」的找券助手，一个靠谱、热心的剁友。你的唯一使命：帮用户找优惠券、领红包、凑满减、把用户发来的链接转成返利链接、省钱。
+const SYSTEM_PROMPT = `你是「羊毛AI」的找券助手，一个靠谱、热心的剁友。你的唯一使命：帮用户找优惠券、领红包、凑满减、把用户发来的链接转成优惠链接、省钱。
 
 【能聊的】
 - 商品推荐、比价、找券、凑单、红包领取、双11节奏与攻略
@@ -133,11 +134,79 @@ const SYSTEM_PROMPT = `你是「羊毛AI」的找券助手，一个靠谱、热�
 - 像朋友聊天，不端着，不写长篇大论，不堆术语
 - 推荐商品时说清楚：叫什么、券后多少钱、券多大、销量如何，最多 3 款
 - 不编造商品；接口没数据就直说，并给换关键词的建议
-- 用户要红包 → 调 get_redpacket 拿到链接后，直接把链接和领取方式发给用户
+- 用户要红包、问红包怎么领/哪里领 → 必须调 get_redpacket（用户没给关键词就用「超级红包」），拿到链接后直接把链接和领取方式发给用户，不要反问
 - 用户想买东西 → 调 search_goods；用户要榜单/随便看看 → 调 get_feed
-- 用户发来链接/口令要转链 → 调 convert_link，把转好的返利链接和有什么券告诉用户
+- 用户发来链接/口令要转链 → 调 convert_link，把转好的优惠链接和有什么券告诉用户
 - 用户问凑单 → 结合满减门槛和已选金额，推荐价格合适的商品
 - 双11节奏：11.01 00:00 付尾款，11.10 20:00 高潮期红包雨，11.12-11.13 返场捡漏`;
+
+/* 部分模型（Qwen 系）会把工具调用混在正文里，常见三种形式：
+ *   ① {{"name":"search_goods","arguments":{...}}}
+ *   ② {"name":"search_goods","arguments":{...}}
+ *   ③ query = search_goods("纯牛奶") / search_goods(keyword="纯牛奶")
+ * 这里统一解析出来当真正的工具调用用；同时清理最终回复里残留的调用片段。 */
+var INLINE_TOOL_NAMES = ["search_goods", "get_feed", "get_redpacket", "convert_link"];
+var INLINE_TOOL_FIRST_ARG = { search_goods: "keyword", get_feed: "type", get_redpacket: "keyword", convert_link: "content" };
+
+function parseCallArgs(name, inner) {
+  inner = (inner || "").trim();
+  if (inner.indexOf("{") === 0) {
+    try { return JSON.parse(inner); } catch (e) {}
+  }
+  var args = {};
+  var kv = inner.match(/(\w+)\s*=\s*["']([^"']*)["']/g);
+  if (kv) {
+    kv.forEach(function (p) {
+      var m = p.match(/(\w+)\s*=\s*["']([^"']*)["']/);
+      if (m) args[m[1]] = m[2];
+    });
+    if (Object.keys(args).length) return args;
+  }
+  var pos = inner.match(/^["']([^"']*)["']$/);
+  if (pos) args[INLINE_TOOL_FIRST_ARG[name] || "keyword"] = pos[1];
+  return args;
+}
+
+function parseInlineToolCall(text) {
+  var s = String(text || "");
+  var m = s.match(/\{\{\s*"name"\s*:\s*"([a-z_]+)"\s*,\s*"arguments"\s*:\s*(\{[\s\S]*?\})\s*\}\}/)
+    || s.match(/\{\s*"name"\s*:\s*"([a-z_]+)"\s*,\s*"arguments"\s*:\s*(\{[\s\S]*?\})\s*\}/);
+  if (m) {
+    var args = {};
+    try { args = JSON.parse(m[2]); } catch (e) {}
+    return { name: m[1], args: args };
+  }
+  for (var i = 0; i < INLINE_TOOL_NAMES.length; i++) {
+    var name = INLINE_TOOL_NAMES[i];
+    var fm = s.match(new RegExp("(?:=\\s*|\\b)" + name + "\\s*[(（]([^)）]*)[)）]"));
+    if (fm) return { name: name, args: parseCallArgs(name, fm[1]) };
+  }
+  return null;
+}
+function cleanReply(t) {
+  return String(t || "")
+    .replace(/\{\{[\s\S]*?\}\}/g, "")
+    .replace(/(?:query\s*=\s*|调用\s*|call\s+)?(?:search_goods|get_feed|get_redpacket|convert_link)\s*[(（][^)）]*[)）]/g, "")
+    .trim();
+}
+
+/* 规整模型返回的工具调用：补齐 type=function、arguments 转字符串、剔除畸形项。
+ * 上游对 tool_calls 校验严格（缺 type / 空数组都会 400），必须先净化再回传历史。 */
+function normalizeToolCalls(list) {
+  if (!Array.isArray(list)) return [];
+  var out = [];
+  list.forEach(function (c, i) {
+    if (!c || !c.function || typeof c.function.name !== "string") return;
+    var args = c.function.arguments;
+    if (args && typeof args !== "string") args = JSON.stringify(args);
+    out.push({
+      id: c.id || ("call_" + Date.now() + "_" + i),
+      type: "function",
+      function: { name: c.function.name, arguments: args || "{}" }
+    });
+  });
+  return out;
+}
 
 async function llmChat(messages) {
   const base = env.LLM_BASE_URL || "https://api.siliconflow.cn/v1";
@@ -162,18 +231,32 @@ async function llmChat(messages) {
         enable_thinking: false
       })
     });
-    if (!res.ok) throw new Error("LLM error " + res.status);
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      throw new Error("LLM error " + res.status + " " + errBody.slice(0, 300));
+    }
     const data = await res.json();
     const msg = data.choices[0].message;
     chatMessages.push(msg);
 
-    if (!msg.tool_calls) {
-      // 兜底：个别情况下答案会落在 reasoning_content
-      const reply = (msg.content || "").trim() || (msg.reasoning_content || "").trim();
+    // 兜底 1：模型把工具调用写进正文（{{"name":...,"arguments":...}}）时，解析出来当真调用用
+    var toolCalls = normalizeToolCalls(msg.tool_calls);
+    if (!toolCalls.length && msg.content) {
+      const inline = parseInlineToolCall(msg.content);
+      if (inline) {
+        toolCalls = [{ id: "call_inline_" + round, type: "function", function: { name: inline.name, arguments: JSON.stringify(inline.args) } }];
+      }
+    }
+    if (toolCalls.length) msg.tool_calls = toolCalls;
+    else delete msg.tool_calls;
+
+    if (!toolCalls.length) {
+      // 兜底 2：个别情况下答案会落在 reasoning_content
+      const reply = cleanReply((msg.content || "").trim() || (msg.reasoning_content || "").trim());
       return { reply: reply || "这个我没接上，换个说法再试试？", products, redpackets, links };
     }
 
-    for (const call of msg.tool_calls) {
+    for (const call of toolCalls) {
       let args = {};
       try { args = JSON.parse(call.function.arguments || "{}"); } catch (e) {}
       let cards = [];
@@ -288,7 +371,26 @@ const server = createServer(async (req, res) => {
       return json(res, data);
     }
 
-    /* ---- 对话转链：用户发链接 → 返利归因链接 ---- */
+    /* ---- 消灭小红包专区 ---- */
+    if (url.pathname === "/api/xhd") {
+      if (!env.HDK_APIKEY) return json(res, { error: "未配置 HDK_APIKEY" }, 503);
+      let data = cacheGet("xhd");
+      if (!data) { data = await hdkXhdList(env); cacheSet("xhd", data); }
+      return json(res, data);
+    }
+
+    /* ---- 凑单工具：解析用户粘贴的链接/口令 ---- */
+    if (url.pathname === "/api/parse" && req.method === "POST") {
+      if (!env.HDK_APIKEY) return json(res, { error: "未配置 HDK_APIKEY" }, 503);
+      const body = await readBody(req);
+      const text = String(body.text || "").slice(0, 500);
+      if (!text) return json(res, { error: "缺少 text 参数" }, 400);
+      const r = await parsePastedLink(env, text);
+      if (!r) return json(res, { error: "没识别出链接或口令，换一个试试" }, 400);
+      return json(res, r);
+    }
+
+    /* ---- 对话转链：用户发链接 → 优惠归因链接 ---- */
     if (url.pathname === "/api/convert" && req.method === "POST") {
       if (!env.HDK_APIKEY) return json(res, { error: "未配置 HDK_APIKEY" }, 503);
       const body = await readBody(req);
