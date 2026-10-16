@@ -438,7 +438,7 @@ const server = createServer(async (req, res) => {
         else if (sub === "list") {
           const type = url.searchParams.get("type") || "0";
           data = hours > 0
-            ? await hdkWireReportRecent(type, hours, max)
+            ? await hdkWireReportRecent(type, hours, max, 6000)
             : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
         } else if (sub === "material") {
           const tag = url.searchParams.get("tag") || "宠物";

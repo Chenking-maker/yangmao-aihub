@@ -35,7 +35,7 @@ import { sendPush, htmlWrap } from "./push.js";
 const CACHE_TTL = 600;
 const WIRE_TTL = 180;   // 线报流动性高：3 分钟就重取一次
 const WIRE_STALE_TTL = 1800;  // 旧线报最多顶 30 分钟（先秒回，后台换新）
-const WIRE_BUDGET = 8000;     // 翻页抓线报的总时间预算：到点就收手，有多少返多少
+const WIRE_BUDGET = 6000;     // 前台等线报的总时间预算：到点就收手，先发已抓到的
 const DAILY_CRON = "0 0 * * *";   // 北京时间每天 08:00 → 省钱日报推送
 const memCache = new Map();
 
@@ -702,13 +702,13 @@ export default {
         /* 翻页拉线报要打很多次上游，而 Cloudflare 边缘到好单库一次就可能要好几秒，
            所以这里最看重「秒回」：只要缓存里还有东西，哪怕旧了也先发给用户，
            后台悄悄换新。真没缓存才阻塞等一次（带 8 秒预算）。 */
-        const build = async () => {
+        const build = async (budget) => {
           let data = null;
           if (sub === "categories") data = await hdkWireCategories();
           else if (sub === "list") {
             const type = url.searchParams.get("type") || "0";
             data = hours > 0
-              ? await hdkWireReportRecent(type, hours, max, WIRE_BUDGET)
+              ? await hdkWireReportRecent(type, hours, max, budget)
               : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
           } else if (sub === "material") {
             const tag = url.searchParams.get("tag") || "宠物";
@@ -728,17 +728,23 @@ export default {
           const age = (Date.now() - hit.t) / 1000;
           if (age < WIRE_TTL) return json(hit.data);
           if (age < WIRE_STALE_TTL) {
-            /* 旧数据先顶上，后台换新 —— 用户永远不用等翻页 */
+            /* 旧数据先顶上，后台换新 —— 用户永远不用等翻页。
+               后台不急，预算给足（20s），把 200 条这种大列表一次抓满。 */
             if (ctx && ctx.waitUntil) {
-              ctx.waitUntil(Promise.resolve().then(build).then(d => heavySet(key, d)).catch(() => { /* 刷新失败继续用旧的 */ }));
+              ctx.waitUntil(Promise.resolve().then(() => build(20000)).then(d => heavySet(key, d)).catch(() => { /* 刷新失败继续用旧的 */ }));
             }
             return json(hit.data);
           }
         }
 
-        const data = await build();
-        const done = heavySet(key, data).catch(() => { /* ignore */ });
-        if (ctx && ctx.waitUntil) ctx.waitUntil(done); else await done;
+        /* 真没缓存：前台只等 WIRE_BUDGET，超了就先把当前这批发出去，
+           后台再补一次「抓满」的（下一次访客就是全量了） */
+        const data = await build(WIRE_BUDGET);
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(Promise.resolve().then(() => build(20000)).then(d => heavySet(key, d)).catch(() => { /* ignore */ }));
+        } else {
+          await heavySet(key, data).catch(() => { /* ignore */ });
+        }
         return json(data);
       }
 
