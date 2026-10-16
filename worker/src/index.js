@@ -459,7 +459,9 @@ const SITE_URL = "https://chenking-maker.github.io/yangmao-aihub/";
 async function probe(name, fn) {
   const t0 = Date.now();
   try {
-    const r = await withTimeout(fn(), 10000, name);
+    /* 15 秒：Cloudflare 边缘到好单库偶尔单次就要 7~12 秒（实测），
+       10 秒会把它判成「挂了」→ 每 30 分钟误发告警。放宽后只抓真故障。 */
+    const r = await withTimeout(fn(), 15000, name);
     /* 返回字符串 = 「没配置，不算故障」（比如未配 LLM_API_KEY / 京东官方通道），
        返回 true 或 { ok:true, detail } = 通了；抛异常 = 真的挂了会告警 */
     const note = typeof r === "string" ? r : "";
