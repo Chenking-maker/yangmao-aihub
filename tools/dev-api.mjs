@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
-  hdkActivityList, hdkConference, relayActivity,
+  hdkActivityList, hdkConference, relayActivity, verifyActivities,
   hdkWireCategories, hdkWireReport, hdkWireReportRecent, hdkMaterialCommunities, hdkMaterialItems,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
   convertLink, proxyImage, dailyStats, bjDate
@@ -273,7 +273,9 @@ async function llmChat(messages) {
           const link = await relayActivity(env, {
             activityId: hit.activityId,
             activityUrl: hit.url,
+            direct: hit.direct || "",
             title: hit.name,
+            platform: hit.platform || "",
             channel: hit.channel || ""
           });
           cards = [{
@@ -382,7 +384,12 @@ const server = createServer(async (req, res) => {
       if (!env.HDK_APIKEY) return json(res, { error: "未配置 HDK_APIKEY" }, 503);
       const kw = url.searchParams.get("q") || "";
       let data = cacheGet("a:" + kw);
-      if (!data) { data = await hdkActivityList(env, 1, kw); cacheSet("a:" + kw, data); }
+      if (!data) {
+        data = await hdkActivityList(env, 1, kw);
+        /* 与线上一致：实测核验「这张卡到底能不能生成你的返利链接」，据此打标 */
+        await verifyActivities(env, data, 12).catch(() => { /* 核验失败不影响返回 */ });
+        cacheSet("a:" + kw, data);
+      }
       return json(res, data);
     }
 
@@ -394,23 +401,25 @@ const server = createServer(async (req, res) => {
         activityUrl: body.activityUrl || "",
         direct: body.direct || "",
         title: body.title || "双11红包会场",
+        platform: body.platform || "",
         channel: body.channel || ""
       });
       return json(res, r);
     }
 
-    /* ---- 实时线报广场：默认 24 小时滚动总量 ---- */
+    /* ---- 实时线报广场：按分类给窗口（时间 + 条数双限）---- */
     if (url.pathname === "/api/wire") {
       const sub = url.searchParams.get("sub") || "categories";
-      const hours = Number(url.searchParams.get("hours") === null ? 24 : url.searchParams.get("hours"));
-      const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + hours;
+      const hours = Number(url.searchParams.get("hours") === null ? 12 : url.searchParams.get("hours"));
+      const max = Math.min(Math.max(Number(url.searchParams.get("max")) || 200, 20), 300);
+      const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + hours + ":" + max;
       let data = cacheGet(key);
       if (!data) {
         if (sub === "categories") data = await hdkWireCategories();
         else if (sub === "list") {
           const type = url.searchParams.get("type") || "0";
           data = hours > 0
-            ? await hdkWireReportRecent(type, hours)
+            ? await hdkWireReportRecent(type, hours, max)
             : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
         } else if (sub === "material") {
           const tag = url.searchParams.get("tag") || "宠物";

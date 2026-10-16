@@ -26,6 +26,17 @@ ALERT_MAIL_TO = "370542303@qq.com"
 ALERT_TOKEN = "woolalert-20261016"
 # 省钱日报的微信推送通道（PushPlus 的 PUSH_TOKEN / 企业微信机器人 WECOM_WEBHOOK）
 
+# ---- 渠道标识 + 自有账号固定推广链接 ----
+# 渠道标识 = 好单库后台「点立即推广」里填的那个值（本地生活会场转链会带上它）
+HDK_CHANNEL = "yangmao"
+# 好单库开放平台的京东转链只认「官方账号」；自有账号的推广链接请在好单库后台
+# 「立即推广 → 渠道标识 yangmao」生成后粘贴到下面。留空则该平台走默认通道/直达入口。
+LINK_JD_MAIN = ""
+LINK_JD_RED = ""
+LINK_JD_WM = ""
+LINK_PDD = ""
+LINK_DY = "https://z.douyin.com/JImh7NBm"
+
 # 定时任务：
 #  ① 每天 08:00（北京时间）= 生成「省钱日报」并推送微信
 #  ② 每 30 分钟 = 全链路体检（异常发邮件）+ 重接口缓存预热

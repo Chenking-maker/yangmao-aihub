@@ -202,7 +202,7 @@
       el.innerHTML =
         '<div class="act-top"><span class="act-platform">' + W.esc(a.platform) + '</span><span class="act-name">' + W.esc(a.name) + '</span></div>' +
         '<div class="act-time">' + W.esc(a.period || "") +
-          (a.rebate ? ' <span class="rebate-dot">专属优惠</span>' : (a.needAuth ? ' <span class="rebate-dot soon">待开通</span>' : '')) + '</div>' +
+          (a.rebate ? ' <span class="rebate-dot">专属优惠</span>' : (a.needAuth ? ' <span class="rebate-dot soon">未配返利</span>' : '')) + '</div>' +
         '<button class="act-btn">进入会场 ›</button>';
       el.querySelector(".act-top").appendChild(W.starBtn({
         k: "a:" + (a.activityId || a.id || a.name), type: "activity", title: a.name,

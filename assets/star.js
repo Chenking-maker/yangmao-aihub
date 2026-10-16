@@ -15,8 +15,17 @@
   var headCount = $("starHeadCount");
   var picked = {};   // k -> true
 
-  var TYPE_NAME = { product: "好价商品", wire: "实时线报", activity: "红包会场", life: "本地生活" };
-  var TYPE_ICO = { product: "🛍️", wire: "📡", activity: "🧧", life: "🍜" };
+  var TYPE_NAME = { product: "好价商品", wire: "实时线报", wirelink: "线报好物", activity: "红包会场", life: "本地生活" };
+  var TYPE_ICO = { product: "🛍️", wire: "📡", wirelink: "🔗", activity: "🧧", life: "🍜" };
+  var FILTERS = [
+    { k: "all", label: "全部" },
+    { k: "product", label: "🛍️ 好价商品" },
+    { k: "wirelink", label: "🔗 线报好物" },
+    { k: "wire", label: "📡 实时线报" },
+    { k: "activity", label: "🧧 红包会场" },
+    { k: "life", label: "🍜 本地生活" }
+  ];
+  var filter = "all";
 
   function daysLeft(ts) {
     var left = 30 - Math.floor((Date.now() - (ts || 0)) / 86400000);
@@ -53,15 +62,22 @@
         '</div>'
       : "";
 
-    var body = it.type === "wire"
-      ? '<div class="star-desc">' + W.esc(strip(it.title).slice(0, 120)) + '</div>'
+    var isWireish = (it.type === "wire" || it.type === "wirelink");
+    var full = strip(it.title);
+    var head = isWireish ? full.slice(0, 56) : String(it.title || "").slice(0, 60);
+    var tail = isWireish ? full.slice(56, 170) : "";
+    var body = isWireish
+      ? (tail ? '<div class="star-desc">' + W.esc(tail) + '</div>' : "")
       : (it.shop ? '<div class="star-shop">' + W.esc(it.shop) + '</div>' : "");
+
+    /* 打开按钮文案要区分：好价商品/线报好物=可直接打开；整条线报=跳线报广场 */
+    var goLabel = it.type === "wire" ? "去线报广场" : (it.type === "wirelink" ? "转链打开" : "打开");
 
     el.innerHTML =
       '<label class="star-pick"><input type="checkbox" ' + (picked[it.k] ? "checked" : "") + '></label>' +
       '<div class="star-thumb">' + pic + '</div>' +
       '<div class="star-body">' +
-        '<div class="star-title">' + W.esc(String(it.title || "").slice(0, 60)) + '</div>' +
+        '<div class="star-title">' + W.esc(head) + '</div>' +
         body + priceRow +
         '<div class="star-meta">' +
           '<span class="star-type">' + (TYPE_ICO[it.type] || "⭐") + " " + (TYPE_NAME[it.type] || "收藏") + '</span>' +
@@ -69,7 +85,7 @@
         '</div>' +
       '</div>' +
       '<div class="star-acts">' +
-        '<button class="star-go">打开</button>' +
+        '<button class="star-go">' + goLabel + '</button>' +
         '<button class="star-drop">移除</button>' +
       '</div>';
 
@@ -88,11 +104,63 @@
     return el;
   }
 
+  /* 线报好物：先同步占位开窗（不然转链是异步的，浏览器会当弹窗拦掉），拿到链接再填进去 */
+  function openWireLink(it) {
+    var fallback = String(it.link || "");
+    if (it.url) {
+      W.logSave({ k: it.k, title: it.title, save: it.save });
+      window.open(it.url, "_blank", "noopener");
+      return;
+    }
+    if (!fallback) { W.toast("这条没有可打开的链接，去线报广场看看同款"); return; }
+
+    var pre = null;
+    try { pre = window.open("about:blank", "_blank"); } catch (e) { pre = null; }
+    if (pre) {
+      try { pre.document.write('<title>正在获取…</title><div style="font-family:-apple-system,\'PingFang SC\',sans-serif;padding:44px;text-align:center;color:#555;font-size:15px">正在获取你的专属优惠链接…</div>'); } catch (e) { /* ignore */ }
+    }
+    function land(url) {
+      if (pre && !pre.closed) { try { pre.opener = null; } catch (e) { /* ignore */ } pre.location.href = url; }
+      else window.open(url, "_blank", "noopener");
+    }
+    W.toast("正在获取你的专属链接…");
+    W.apiPost("/api/convert", { text: fallback }).then(function (r) {
+      var url = (r && r.url) || "";
+      if (!url && /^https?:\/\//.test(fallback)) url = fallback;      // 转不了就打开原链接，保证点得开
+      if (url) {
+        W.logSave({ k: it.k, title: it.title, save: it.save });
+        var list = W.starList();
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].k === it.k) { list[i].url = url; break; }
+        }
+        try { localStorage.setItem("ck_star_items", JSON.stringify(list)); } catch (e) { /* ignore */ }
+        land(url);
+        W.toast(r && r.converted === false ? "已为你打开原链接（这条暂时转不了返利）" : "已打开你的专属优惠链接");
+      } else if (r && r.taoCode) {
+        if (pre && !pre.closed) try { pre.close(); } catch (e) { /* ignore */ }
+        W.copyText(r.taoCode, "淘口令已复制，打开淘宝自动识别");
+      } else {
+        if (pre && !pre.closed) try { pre.close(); } catch (e) { /* ignore */ }
+        W.toast((r && (r.note || r.error)) || "没取到链接，稍后再试");
+      }
+    }).catch(function () {
+      if (pre && !pre.closed) try { pre.close(); } catch (e) { /* ignore */ }
+      W.toast("网络开小差了，再试一次");
+    });
+  }
+
   function openItem(it) {
     if (it.type === "product") {
       W.logSave({ k: it.k, title: it.title, save: it.save });
       if (it.url) { window.open(it.url, "_blank", "noopener"); return; }
       W.openCoupon({ id: it.itemId, title: it.title, couponurl: it.url, price: it.price, endPrice: it.endPrice, coupon: it.coupon });
+      return;
+    }
+    if (it.type === "wirelink") { openWireLink(it); return; }
+    if (it.type === "wire") {
+      /* 整条线报只是个备忘（一条线报可能含多个商品链接），打开去线报广场找同款 */
+      window.open("tipoff.html", "_blank", "noopener");
+      W.toast("已打开线报广场，帮你找回这条线报");
       return;
     }
     if (it.type === "activity") {
@@ -177,11 +245,35 @@
     render();
   });
 
+  /* ---------- 分类筛选（实时线报 / 线报好物 / 好价商品 … 分开看） ---------- */
+  var filterEl = $("starFilter");
+  function renderFilters(list) {
+    if (!filterEl) return;
+    var counts = {};
+    list.forEach(function (x) { counts[x.type] = (counts[x.type] || 0) + 1; });
+    filterEl.innerHTML = "";
+    FILTERS.forEach(function (f) {
+      var n = f.k === "all" ? list.length : (counts[f.k] || 0);
+      if (f.k !== "all" && !n) return;          // 没有的类型不占位
+      var b = document.createElement("button");
+      b.className = "star-filter-chip" + (filter === f.k ? " on" : "");
+      b.textContent = f.label + " " + n;
+      b.addEventListener("click", function () {
+        if (filter === f.k) return;
+        filter = f.k;
+        render();
+      });
+      filterEl.appendChild(b);
+    });
+  }
+
   /* ---------- 渲染 ---------- */
   function render() {
-    var list = W.starList();
-    headCount.textContent = list.length + " 件";
-    if (!list.length) {
+    var all = W.starList();
+    var list = filter === "all" ? all : all.filter(function (x) { return x.type === filter; });
+    headCount.textContent = all.length + " 件";
+    renderFilters(all);
+    if (!all.length) {
       grid.innerHTML =
         '<div class="star-empty">' +
           '<div class="star-empty-ico">⭐</div>' +
@@ -191,6 +283,16 @@
             '<a class="star-empty-btn" href="tipoff.html">去线报广场 ›</a>' +
             '<a class="star-empty-btn ghost" href="index.html#feed">去好价榜 ›</a>' +
           '</div>' +
+        '</div>';
+      paintSel();
+      return;
+    }
+    if (!list.length) {
+      grid.innerHTML =
+        '<div class="star-empty">' +
+          '<div class="star-empty-ico">🗂️</div>' +
+          '<div class="star-empty-t">这个分类下还没有收藏</div>' +
+          '<div class="star-empty-s">点上面的「全部」看看其它宝贝。</div>' +
         '</div>';
       paintSel();
       return;

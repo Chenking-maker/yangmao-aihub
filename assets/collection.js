@@ -39,7 +39,7 @@
         '<div class="coll-top"><span class="coll-pf">' + W.esc(a.platform || PLATFORMS[String(a.platform)] || "活动") + '</span>' +
         '<span class="coll-name">' + W.esc(a.name || "活动会场") + '</span></div>' +
         '<div class="coll-desc">' + W.esc(a.period || "双11 全周期可参与") +
-          (a.rebate ? ' <span class="rebate-dot">专属优惠</span>' : (a.needAuth ? ' <span class="rebate-dot soon">待开通</span>' : '')) + '</div>' +
+          (a.rebate ? ' <span class="rebate-dot">专属优惠</span>' : (a.needAuth ? ' <span class="rebate-dot soon">未配返利</span>' : '')) + '</div>' +
         '<button class="coll-btn">进入领取 ›</button>';
       el.querySelector(".coll-top").appendChild(W.starBtn(actStarItem(a)));
       el.querySelector(".coll-btn").addEventListener("click", function () {

@@ -693,6 +693,16 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
 .wire-btn.ghost { background: transparent; border: 1px solid var(--hairline-2); color: var(--text-2); }
 .wire-btn.ghost:hover { color: var(--text); border-color: var(--text-3); }
 .wire-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+/* 线报商品行里的「收藏」星标：跟转链按钮并排，做成胶囊小按钮 */
+.wire-foot > .star-btn {
+  position: static; top: auto; right: auto;
+  width: auto; height: 32px; padding: 0 13px; border-radius: var(--r-sm);
+  display: inline-flex; align-items: center; gap: 5px;
+  background: transparent; border-color: var(--hairline-2); color: var(--text-2);
+}
+.wire-foot > .star-btn span { font-size: 12.5px; font-weight: 500; line-height: 1; }
+.wire-foot > .star-btn:hover { color: var(--gold); border-color: var(--gold-border); background: var(--gold-bg); transform: none; }
+.wire-foot > .star-btn.on { color: #b8860b; border-color: rgba(224, 168, 0, .5); background: #fff8e1; }
 /* 「专属优惠」小标 —— 表示该入口能生成带推广标识的链接 */
 .rebate-dot {
   display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
@@ -1604,6 +1614,18 @@ body.has-page-side.ps-closed .side-toggle:hover { left: 0; }
 .star-tool-btn:hover { opacity: .88; }
 .star-tool-btn.ghost { background: transparent; color: var(--text-2); border-color: var(--hairline-2); }
 .star-tool-btn.ghost:hover { color: var(--red); border-color: var(--red); background: var(--red-bg); opacity: 1; }
+
+/* 星标分类筛选：实时线报 / 线报好物 / 好价商品 分开看 */
+.star-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.star-filter:empty { display: none; }
+.star-filter-chip {
+  height: 30px; padding: 0 13px; border-radius: 999px; font-size: 12.5px; font-weight: 500;
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--hairline); cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.star-filter-chip:hover { color: var(--text); border-color: var(--text-3); }
+.star-filter-chip.on { background: var(--red); color: #fff; border-color: var(--red); }
 
 .star-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; margin-top: 14px; }
 .star-card {

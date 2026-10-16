@@ -340,18 +340,12 @@
     withPreWindow(function (land, dismiss) {
       apiPost("/api/redpacket", {
         activityId: a.activityId, activityUrl: a.url, direct: direct,
-        title: a.name, channel: a.channel || ""
+        title: a.name, platform: a.platform || "", channel: a.channel || ""
       }).then(function (r) {
         if (r && r.needAuth) {
-          dismiss();
-          if (window.confirm("「" + a.name + "」的专属优惠授权还没开通。\n\n" +
-            "开通方法（约 1 分钟）：\n" +
-            "1. 登录好单库 → 个人中心 → 授权管理 → 京东联盟账号授权\n" +
-            "2. 打开京东联盟「我的推广 → 我的工具 → 我的API」，领取授权key\n" +
-            "3. 把 京东联盟ID + 授权key + 失效日期 填进好单库授权处\n\n" +
-            "现在去好单库授权页吗？")) {
-            window.open(r.authUrl, "_blank");
-          }
+          /* 关键：不做成死链 —— 先照常打开原会场，能进得去；再提示怎么升级成你的返利链接 */
+          if (direct) land(direct); else dismiss();
+          toast("已打开「" + a.name + "」原页面 · 想让这张卡走你的返利，去好单库后台生成推广链接发我即可");
           return;
         }
         if (r && r.url) {

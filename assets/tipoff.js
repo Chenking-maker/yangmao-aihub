@@ -1,6 +1,11 @@
-/* 羊毛AIHUB · 实时线报广场 v2.7（排版重设计）
+/* 羊毛AIHUB · 实时线报广场 v2.13
  * 数据源：好单库线报接口（前端统一呈现为「AI 线报」）/ 素材圈子（宠物/美妆）
- * 每条线报的产品可一键转成用户自己的优惠链接
+ *  ·
+ *  ·  性能：每个分类「时间窗口 + 条数上限」双限（全部 12h/200 条，飞猪 7 天/100 条，
+ *  ·        百亿补贴·淘宝实时·京东实时 24h/200 条），分母可控；前端分批渲染 + 图片懒加载，
+ *  ·        打开不再一次性灌几百张图，卡顿消失。
+ *  ·  星标：整条线报一个星标（进「星标宝贝 · 实时线报」），线报里的每个商品链接单独一个星标
+ *  ·        （进「星标宝贝 · 线报好物」，点开就能转链打开）。两者分开，互不拖累。
  */
 (function () {
   "use strict";
@@ -12,13 +17,13 @@
   function apiGet(p) { return fetch(API_BASE + p).then(function (r) { return r.json(); }); }
   function apiPost(p, b) { return fetch(API_BASE + p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b || {}) }).then(function (r) { return r.json(); }); }
 
-  // 固定的「素材类」线报（宠物/美妆）走 material 通道
+  /* 每个分类的窗口：hours=时间窗口（小时），max=最多保留条数 */
   var TABS = [
-    { key: "all", label: "全部", icon: "🧩", src: "wire", q: "0" },
-    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "10367" },
-    { key: "by", label: "淘宝百亿补贴", icon: "🛒", src: "wire", q: "10005" },
-    { key: "tb", label: "淘宝实时线报", icon: "📦", src: "wire", q: "10003" },
-    { key: "jd", label: "京东实时线报", icon: "🏷️", src: "wire", q: "10004" },
+    { key: "all", label: "全部", icon: "🧩", src: "wire", q: "0", hours: 12, max: 200 },
+    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "10367", hours: 168, max: 100 },
+    { key: "by", label: "淘宝百亿补贴", icon: "🛒", src: "wire", q: "10005", hours: 24, max: 200 },
+    { key: "tb", label: "淘宝实时线报", icon: "📦", src: "wire", q: "10003", hours: 24, max: 200 },
+    { key: "jd", label: "京东实时线报", icon: "🏷️", src: "wire", q: "10004", hours: 24, max: 200 },
     { key: "pet", label: "宠物线报", icon: "🐾", src: "material", q: "宠物" },
     { key: "beauty", label: "美妆线报", icon: "💄", src: "material", q: "美妆" }
   ];
@@ -59,18 +64,77 @@
     return "";
   }
 
-  /* 把一条线报整理成「星标宝贝」结构 */
+  function strip(s) {
+    return String(s || "").replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+  }
+
+  /* 从线报文字里粗略估个价（有「券后/到手 xx 元」或两个以上价格时才用，估不准就不填） */
+  function parsePrice(text) {
+    var t = String(text || "");
+    var nums = [], re = /(\d+(?:\.\d+)?)\s*(?:元|块)/g, m;
+    while ((m = re.exec(t))) {
+      var v = parseFloat(m[1]);
+      if (v > 0 && v < 200000) nums.push(v);
+    }
+    if (nums.length >= 2) {
+      var mx = Math.max.apply(null, nums), mn = Math.min.apply(null, nums);
+      if (mx > mn) return { price: mx, endPrice: mn };
+    }
+    var m2 = t.match(/(?:券后|到手|秒杀|活动价|补贴后|立减后)[^\d]{0,8}(\d+(?:\.\d+)?)/);
+    if (m2) {
+      var v2 = parseFloat(m2[1]);
+      if (v2 > 0 && v2 < 200000) return { price: 0, endPrice: v2 };
+    }
+    return { price: 0, endPrice: 0 };
+  }
+
+  function wireText(it) {
+    return strip((it.lines || []).map(function (l) { return l.text || ""; }).filter(Boolean).join(" "));
+  }
+
+  /* 一根线报里所有「能转链的行」 */
+  function wireLinks(it) {
+    var out = [];
+    (it.lines || []).forEach(function (l, i) {
+      var link = l.itemId || (l.text && hasLink(l.text) ? l.text : "");
+      if (!link) return;
+      out.push({ i: i, link: link, text: l.text || "", pureToken: !!(l.itemId && !l.text) });
+    });
+    return out;
+  }
+
+  /* 整条线报 → 星标项（「实时线报」类，点开去线报广场） */
   function wireStarItem(it) {
-    var text = (it.lines || []).map(function (l) { return l.text || ""; }).filter(Boolean).join(" ");
-    text = text.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+    var text = wireText(it);
     return {
       k: "w:" + it.id,
       type: "wire",
-      title: text.slice(0, 180) || (it.platform + " · " + (it.time || "实时线报")),
+      title: text.slice(0, 160) || (it.platform + " · " + (it.time || "实时线报")),
       pic: (it.images && it.images[0]) || "",
       platform: it.platform,
       time: it.time || "",
       save: 0
+    };
+  }
+
+  /* 线报里的单个商品 → 星标项（「线报好物」类，点开直接转链打开） */
+  function linkStarItem(it, idx, link, lineText) {
+    var all = wireText(it);
+    var base = strip(lineText).replace(/^[·\-—\s]+/, "") || all;
+    var pr = parsePrice((lineText || "") + " " + all);
+    var save = (pr.price > 0 && pr.endPrice > 0 && pr.price > pr.endPrice)
+      ? Math.round((pr.price - pr.endPrice) * 10) / 10 : 0;
+    return {
+      k: "wl:" + it.id + ":" + idx,
+      type: "wirelink",
+      title: base.slice(0, 140) || (it.platform + " · " + (it.time || "线报好物")),
+      link: link,
+      pic: (it.images && it.images[0]) || "",
+      platform: it.platform,
+      time: it.time || "",
+      price: pr.price || 0,
+      endPrice: pr.endPrice || 0,
+      save: save
     };
   }
 
@@ -79,22 +143,19 @@
     card.className = "wire-card";
     // 行结构：content=文字说明；item_id=淘口令 token（紧跟着商品描述出现）
     var linesHtml = "";
-    it.lines.forEach(function (l) {
-      if (l.itemId && !l.text) {
-        linesHtml += '<div class="wire-foot"><button class="wire-btn act-convert" data-text="' +
-          encodeURIComponent(l.itemId) + '">🛒 获取购买链接</button></div>';
-      } else if (l.text) {
-        linesHtml += '<div class="wire-line">' + W.esc(l.text) + '</div>';
-        if (hasLink(l.text)) {
-          linesHtml += '<div class="wire-foot"><button class="wire-btn act-convert" data-text="' +
-            encodeURIComponent(l.text) + '">🔗 转我的链接</button></div>';
-        }
+    (it.lines || []).forEach(function (l, idx) {
+      var link = l.itemId || (l.text && hasLink(l.text) ? l.text : "");
+      if (l.text) linesHtml += '<div class="wire-line">' + W.esc(l.text) + '</div>';
+      if (link) {
+        linesHtml += '<div class="wire-foot" data-i="' + idx + '">' +
+          '<button class="wire-btn act-convert" data-text="' + encodeURIComponent(link) + '">' +
+          (l.itemId && !l.text ? "🛒 获取购买链接" : "🔗 转我的链接") + '</button></div>';
       }
     });
 
     var imgsHtml = (it.images && it.images.length)
       ? '<div class="wire-imgs">' + it.images.map(function (u) {
-          return '<img loading="lazy" src="' + API_BASE + '/api/img?u=' + encodeURIComponent(u) + '" referrerpolicy="no-referrer" alt="">';
+          return '<img loading="lazy" decoding="async" src="' + API_BASE + '/api/img?u=' + encodeURIComponent(u) + '" referrerpolicy="no-referrer" alt="">';
         }).join("") + '</div>'
       : "";
 
@@ -107,9 +168,17 @@
       '<div class="wire-lines">' + linesHtml + '</div>' +
       imgsHtml;
 
-    // 星标：把这条线报存进「我的星标宝贝」
+    // ① 整条线报的星标（右侧「实时线报」）
     var top = card.querySelector(".wire-card-top");
     if (top) top.appendChild(W.starBtn(wireStarItem(it)));
+
+    // ② 每个商品链接单独一个星标（「线报好物」）—— 点开就能转链打开
+    var links = wireLinks(it);
+    card.querySelectorAll(".wire-foot").forEach(function (foot, n) {
+      var lk = links[n];
+      if (!lk) return;
+      foot.appendChild(W.starBtn(linkStarItem(it, lk.i, lk.link, lk.text), "收藏"));
+    });
 
     // 绑定转链按钮
     card.querySelectorAll(".act-convert").forEach(function (btn) {
@@ -149,12 +218,12 @@
   /* ---- 骨架屏 ---- */
   function showSkeleton() {
     listEl.innerHTML = "";
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 3; i++) {
       var sk = document.createElement("div");
       sk.className = "wire-sk";
       sk.innerHTML =
         '<div class="wire-sk-top"><span class="wire-sk-badge"></span><span class="wire-sk-line w40"></span></div>' +
-        '<div class="wire-sk-line w90"></div><div class="wire-sk-line w75"></div><div class="wire-sk-line w60"></div>' +
+        '<div class="wire-sk-line w90"></div><div class="wire-sk-line w75"></div>' +
         '<div class="wire-sk-imgs"><span></span><span></span><span></span></div>' +
         '<div class="wire-sk-btn"></div>';
       listEl.appendChild(sk);
@@ -163,8 +232,8 @@
 
   function showEmpty(tab) {
     var msg = tab.src === "material"
-      ? tab.label + "：暂无推荐好物，稍后再来看看"
-      : tab.label + "：暂时没有新线报，换分类看看";
+      ? "「" + tab.label + "」暂无推荐好物，稍后再来看看"
+      : "「" + tab.label + "」暂时没有新线报，换分类看看";
     listEl.innerHTML =
       '<div class="wire-empty">' +
         '<div class="wire-empty-ico">' + tab.icon + '</div>' +
@@ -182,9 +251,14 @@
     refreshBtn.disabled = on;
   }
 
-  var WIRE_BATCH = 40;
+  function windowText(hours) {
+    if (!hours) return "全部";
+    return hours >= 48 ? Math.round(hours / 24) + " 天" : hours + " 小时";
+  }
 
-  /* 一次可能几百条线报，分批渲染：先出 40 条，剩下的点「加载更多」 */
+  var WIRE_BATCH = 24;
+
+  /* 一次几十上百条线报，分批渲染：先出 24 条，剩下的点「加载更多」 */
   function renderBatch(items, from) {
     var end = Math.min(items.length, from + WIRE_BATCH);
     for (var i = from; i < end; i++) listEl.appendChild(renderWireItem(items[i]));
@@ -195,7 +269,7 @@
       btn.className = "wire-more";
       btn.id = "wireMore";
       btn.textContent = "加载更多（还有 " + (items.length - end) + " 条）";
-      btn.addEventListener("click", function () { renderBatch(items, end); });
+      btn.addEventListener("click", function () { btn.remove(); renderBatch(items, end); });
       listEl.appendChild(btn);
     }
   }
@@ -207,7 +281,8 @@
     showSkeleton();
     var url = tab.src === "material"
       ? "/api/wire?sub=material&tag=" + encodeURIComponent(tab.q)
-      : "/api/wire?sub=list&type=" + encodeURIComponent(tab.q);
+      : "/api/wire?sub=list&type=" + encodeURIComponent(tab.q) +
+        "&hours=" + tab.hours + "&max=" + tab.max;
     apiGet(url).then(function (d) {
       loading = false;
       setRefreshing(false);
@@ -215,11 +290,12 @@
       var items = (d && d.items) || [];
       if (!items.length) { showEmpty(tab); return; }
       if (tab.src === "material") {
-        metaEl.innerHTML = '共 <b>' + items.length + '</b> 条推荐好物 · 数据实时同步 · 点右上角 ⭐ 可收藏';
+        metaEl.innerHTML = '共 <b>' + items.length + '</b> 条推荐好物 · 点卡片右上角 ⭐ 收藏整条，商品行点「收藏」存单个宝贝';
       } else {
-        var hours = (d && d.hours) || 24;
-        metaEl.innerHTML = '最近 <b>' + hours + '</b> 小时共 <b>' + items.length +
-          '</b> 条线报 · ' + hours + ' 小时前的自动下线 · 点右上角 ⭐ 可收藏';
+        var hours = (d && d.hours) || tab.hours;
+        var max = (d && d.max) || tab.max;
+        metaEl.innerHTML = '最近 <b>' + windowText(hours) + '</b> 共 <b>' + items.length +
+          '</b> 条线报（最多保留 ' + max + ' 条，最新在前）· ⭐ 可收藏整条或单个宝贝';
       }
       renderBatch(items, 0);
     }).catch(function () {

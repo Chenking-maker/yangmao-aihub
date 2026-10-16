@@ -350,6 +350,7 @@ async function llmChat(env, messages) {
             activityUrl: hit.url,
             direct: hit.direct || "",
             title: hit.name,
+            platform: hit.platform || "",
             channel: hit.channel || ""
           });
           cards = [{
@@ -657,18 +658,22 @@ export default {
           activityUrl: body.activityUrl || "",
           direct: body.direct || "",
           title: body.title || "双11红包会场",
+          platform: body.platform || "",
           channel: body.channel || ""
         });
         return json(r);
       }
 
-      /* ---- 实时线报广场：默认按「最近 24 小时滚动总量」返回 ----
-       * 用户要的是当天总量（不是固定 10 条）：24 小时前的自动不再出现。
-       * 想回到分页老行为传 hours=0 即可。缓存 3 分钟（线报流动性高，不能像会场那样长缓存）。 */
+      /* ---- 实时线报广场：按分类给不同窗口（时间 + 条数双限）----
+       *   全部 12h/200 · 飞猪 7天/100 · 百亿补贴·淘宝实时·京东实时 24h/200
+       * 前端把 hours/max 带上来，这里做合法性钳制；想回到分页老行为传 hours=0。
+       * 缓存 3 分钟（线报流动性高，不能像会场那样长缓存）。 */
       if (url.pathname === "/api/wire") {
         const sub = url.searchParams.get("sub") || "categories";
-        const hours = Number(url.searchParams.get("hours") === null ? 24 : url.searchParams.get("hours"));
-        const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + hours;
+        const rawHours = url.searchParams.get("hours");
+        const hours = Number(rawHours === null ? 12 : rawHours);
+        const max = Math.min(Math.max(Number(url.searchParams.get("max")) || 200, 20), 300);
+        const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + hours + ":" + max;
         const hit = await heavyGet(key);
         if (hit && (Date.now() - hit.t) / 1000 < WIRE_TTL) return json(hit.data);
 
@@ -677,7 +682,7 @@ export default {
         else if (sub === "list") {
           const type = url.searchParams.get("type") || "0";
           data = hours > 0
-            ? await hdkWireReportRecent(type, hours)
+            ? await hdkWireReportRecent(type, hours, max)
             : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
         } else if (sub === "material") {
           const tag = url.searchParams.get("tag") || "宠物";

@@ -255,9 +255,29 @@ async function confPut(k, v) {
   } catch (e) { /* 写缓存失败不影响主流程 */ }
 }
 
+/* ---- 固定推广链接（自有账号通道）----
+ * 好单库开放平台的京东转链只服务「官方账号」通道（返回「未开通京东官方账号」）；
+ * 自有账号（自己的京东联盟 / 拼多多 / 抖音）要去好单库后台「立即推广 → 输入渠道标识」手动生成推广链接。
+ * 把生成好的链接配到环境变量（LINK_JD_MAIN / LINK_JD_RED / LINK_JD_WM / LINK_PDD / LINK_DY），
+ * 对应会场卡就直连它 —— 一点就是你的推广链接，返利算你的，跟官方账号无关。
+ */
+function fixedLink(env, name, platform) {
+  env = env || {};
+  var hay = String(name || "") + " " + String(platform || "");
+  if (/京东|京享/.test(hay)) {
+    if (/京享|红包/.test(hay) && env.LINK_JD_RED) return env.LINK_JD_RED;
+    if (/外卖/.test(hay) && env.LINK_JD_WM) return env.LINK_JD_WM;
+    return env.LINK_JD_MAIN || "";
+  }
+  if (/拼多多|多多/.test(hay)) return env.LINK_PDD || "";
+  if (/抖音/.test(hay)) return env.LINK_DY || "";
+  return "";
+}
+
 /**
  * 会场转链总入口：把活动入口换成「带你返利标识」的推广链接。
- * 通道优先级：淘宝 → 美团 → 京东；都失败时降级到原始活动页/官方入口（保证点得动）。
+ * 通道优先级：固定推广链接（自有账号）→ 淘宝 → 美团 → 京东；
+ * 都失败时降级到原始活动页/官方入口（保证点得动）。
  * 转链成功的结果按 活动ID/URL 固定缓存，下次直接复用（opts.fresh = true 可强制重转）。
  * 返回 { url, taoCode, shortUrl, channel, rebate, note, needAuth, authUrl }
  */
@@ -272,6 +292,14 @@ export async function relayActivity(env, opts) {
   if (opts.fresh !== true) {
     var cached = await confMatch(ck);
     if (cached) { cached.cached = true; return cached; }
+  }
+
+  /* ① 首选：用户后台生成的固定推广链接（京东/拼多多/抖音走这里） */
+  var fx = fixedLink(env, name, opts.platform);
+  if (fx) {
+    var fo = { url: fx, channel: "fixed", rebate: true, note: "已用你的专属推广链接打开" };
+    await confPut(ck, fo);
+    return fo;
   }
 
   var order = ["tb", "mt", "jd"];
@@ -289,8 +317,9 @@ export async function relayActivity(env, opts) {
     } else if (c === "jd") r = await jdConference(env, raw, name);
 
     if (r && r.needAuth) {
+      /* 好单库开放平台的京东转链只认「官方账号」；自有账号的推广链接要在好单库后台生成后配到 LINK_JD_* */
       return { url: "", channel: "jd", rebate: false, needAuth: true, authUrl: r.authUrl,
-        note: "京东专属优惠还差一步授权：在好单库后台「个人中心 → 授权管理 → 京东联盟账号授权」填入 联盟ID + 授权key 即可" };
+        note: "这个京东会场还没配你的推广链接。到好单库后台「立即推广 → 输入渠道标识」生成链接后，填入站点配置即可直达你的返利链接" };
     }
     if (r && r.url) {
       var out = { url: r.url, taoCode: r.taoCode || "", shortUrl: r.shortUrl || "", channel: c, rebate: true };
@@ -338,6 +367,8 @@ export async function verifyActivities(env, list, limit) {
   // 先全部清零（normalizeActivity 里的 rebate 是启发式预估，未经实测的一律不打标）
   (list || []).forEach(function (a) { a.rebate = false; delete a.needAuth; });
   await pool(items, 6, async function (a) {
+    /* 有固定推广链接（自己后台生成的京东/拼多多/抖音链接）→ 直接算能拿返利，不用再核 */
+    if (fixedLink(env, a.name, a.platform)) { a.rebate = true; a.channel = "fixed"; return; }
     if (!a.channel) { a.rebate = false; return; }
     try {
       if (a.channel === "tb") {
@@ -369,6 +400,10 @@ export async function hdkMeituanActivities(env) {
   } catch (e) { return null; }
 }
 
+/* 渠道标识：好单库后台「点立即推广 → 输入渠道标识」用的那个值。
+ * 配到环境变量 HDK_CHANNEL（默认 yangmao），转出来的链接就归属到你的渠道。 */
+function hdkChannel(env) { return String((env && env.HDK_CHANNEL) || "yangmao"); }
+
 export async function hdkMeituanLink(env, activityId, linkType) {
   var types = linkType ? [linkType] : [1, 2, 3];
   for (var i = 0; i < types.length; i++) {
@@ -376,7 +411,7 @@ export async function hdkMeituanLink(env, activityId, linkType) {
       apikey: env.HDK_APIKEY,
       activity_id: String(activityId),
       link_type: String(types[i]),
-      channel: "ck_hub"
+      channel: hdkChannel(env)
     });
     try {
       var res = await fetch(HDK_BASE + "/meituan_ratesurl", { method: "POST", body: body });
@@ -389,7 +424,7 @@ export async function hdkMeituanLink(env, activityId, linkType) {
   try {
     var res2 = await fetch(HDK_BASE + "/meituan_ratesurl", {
       method: "POST",
-      body: new URLSearchParams({ apikey: env.HDK_APIKEY, activity_id: String(activityId), link_type: String(types[0]), channel: "ck_hub" })
+      body: new URLSearchParams({ apikey: env.HDK_APIKEY, activity_id: String(activityId), link_type: String(types[0]), channel: hdkChannel(env) })
     });
     var j2 = await res2.json();
     if (j2 && Number(j2.code) === 200 && j2.data && j2.data.url) return j2.data.url;
@@ -488,37 +523,58 @@ export function parseWireTime(s) {
 }
 
 /**
- * 24 小时滚动线报：分批翻页（每页 20 条），按 starttime 过滤出最近 N 小时的全部条目。
- * 24 小时前的自动不再出现 —— 用户要的是「当天总量」而不是固定的 10 条。
- * 翻页是自适应的：某一批全部早于窗口就立刻收手，不会白拉后面的。
- * 返回 { items, total, shown, hours, since, until, pages }
+ * 滚动窗口线报：并发分批翻页（每页 20 条），按 starttime 过滤出「最近 N 小时 + 最多 M 条」。
+ *  ·
+ *  ·  为什么要限两条线（时间 + 条数）：
+ *  ·    - 全部/百亿补贴/淘宝实时/京东实时  流很快，限 12~24 小时 + 200 条，避免一次拉几百条把页面拖卡；
+ *  ·    - 飞猪旅行                            更新慢，窗口放宽到 7 天，但只保留最新 100 条；
+ *  ·    - 24 小时前（或超出条数上限）的自动下线，最新的一定排在最前面。
+ *  ·
+ *  ·  翻页是自适应的：收够条数、或整批都早于窗口、或上游翻到底了就立刻收手，绝不空拉。
+ *  ·  返回 { items, total, shown, hours, max, since, until }
  */
-export async function hdkWireReportRecent(type, hours) {
-  hours = hours || 24;
+export async function hdkWireReportRecent(type, hours, max) {
+  hours = Math.min(Math.max(Number(hours) || 12, 1), 720);
+  max = Math.min(Math.max(Number(max) || 200, 20), 300);
   var cutoff = Date.now() - hours * 3600 * 1000;
-  var MAXP = 20, BATCH = 4;
+  var MAXP = 30, BATCH = 4;
   var row = [];     // { it, t }
   var total = 0;
+
+  function inWindowUnique() {
+    var seen = {}, n = 0;
+    row.forEach(function (x) {
+      if (x.t && x.t < cutoff) return;
+      if (seen[x.it.id]) return;
+      seen[x.it.id] = 1; n++;
+    });
+    return n;
+  }
 
   for (var start = 1; start <= MAXP; start += BATCH) {
     var nums = [];
     for (var i = start; i < start + BATCH && i <= MAXP; i++) nums.push(i);
     var res = [];
     await pool(nums, BATCH, async function (p) {
-      try { res.push(await hdkWireReport(type, p)); } catch (e) { /* 单页失败跳过 */ }
+      try { res.push({ p: p, r: await hdkWireReport(type, p) }); } catch (e) { /* 单页失败跳过 */ }
     });
     if (!res.length) break;
-    if (start === 1) total = res[0].total || 0;
+    res.sort(function (a, b) { return a.p - b.p; });
+    if (start === 1) total = (res[0].r && res[0].r.total) || 0;
 
-    var batchAllOld = true;
-    res.forEach(function (r) {
-      (r.items || []).forEach(function (it) {
+    var batchAllOld = true, got = 0;
+    res.forEach(function (x) {
+      (x.r.items || []).forEach(function (it) {
+        got++;
         var t = parseWireTime(it.time);
         row.push({ it: it, t: t });
         if (!t || t >= cutoff) batchAllOld = false;   // 时间缺失的当新数据留着
       });
     });
-    if (batchAllOld) break;   // 这一整批都早于窗口 → 后面只会更早，收手
+
+    if (got === 0) break;                              // 上游翻到底了
+    if (inWindowUnique() >= max) break;                 // 已收够条数
+    if (batchAllOld) break;                             // 整批早于窗口 → 后面只会更早
   }
 
   var seen = {};
@@ -531,12 +587,14 @@ export async function hdkWireReportRecent(type, hours) {
     items.push(x.it);
   });
   items.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  if (items.length > max) items = items.slice(0, max);   // 最新靠在最前
 
   return {
     items: items,
     total: total,
     shown: items.length,
     hours: hours,
+    max: max,
     since: cutoff,
     until: Date.now()
   };
@@ -749,6 +807,8 @@ export async function parsePastedLink(env, text) {
 export async function convertLink(env, text) {
   var m = extractLinkMaterial(text);
   if (!m) return null;
+  /* 原始链接兜底：转不了链也要保证「点得开」——至少打开用户点的那条原链接 */
+  var rawUrl = (String(text).match(/https?:\/\/[^\s"'，。）)]+/) || [""])[0];
 
   if (m.kind === "jd") {
     var jd = await hdkJdRelink(env, m.materialId, m.couponUrl);
@@ -762,12 +822,13 @@ export async function convertLink(env, text) {
         note: m.couponUrl ? "已转好你的京东链接，券也一起带上啦" : "已转好你的京东链接"
       };
     }
+    var jdFallback = rawUrl || (m.materialId.indexOf("http") === 0 ? m.materialId : "");
     return {
       platform: "京东",
       converted: false,
-      url: m.materialId.indexOf("http") === 0 ? m.materialId : "",
+      url: jdFallback,
       couponUrl: m.couponUrl,
-      note: "这个京东链接暂时转不了，先打开原链接看看吧"
+      note: jdFallback ? "这条京东链接暂时转不了返利，先给你打开原链接" : "这条京东链接暂时转不了，换一个试试"
     };
   }
 
@@ -775,9 +836,9 @@ export async function convertLink(env, text) {
     return {
       platform: "淘宝",
       converted: false,
-      url: "",
+      url: rawUrl || "",
       couponUrl: "",
-      note: "这个链接里提不出商品 ID，把商品链接或淘口令再发我一次试试"
+      note: rawUrl ? "这条链接里提不出商品 ID，先给你打开原链接" : "这个链接里提不出商品 ID，把商品链接或淘口令再发我一次试试"
     };
   }
 
@@ -798,9 +859,9 @@ export async function convertLink(env, text) {
   return {
     platform: m.platform,
     converted: false,
-    url: "",
+    url: rawUrl || "",
     couponUrl: "",
-    note: "这个商品暂时转不了链，可能是下架了，换一个试试"
+    note: rawUrl ? "这个商品暂时转不了链，先给你打开原链接" : "这个商品暂时转不了链，可能是下架了，换一个试试"
   };
 }
 
