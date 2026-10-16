@@ -175,6 +175,7 @@ async function jdInvoke(env, method, biz, timeoutMs) {
 var JD_HINT = {
   "403": "该应用未开通「社交媒体转链」接口权限（jd.union.open.promotion.bysubunionid.get）。去 union.jd.com 联系联盟客服或发邮件 cps@jd.com 申请，开通后本通道自动生效，不用改代码",
   "2001701": "转链接口禁止使用「导购媒体ID」，只认「网站ID / APP ID」。最快的解法：union.jd.com → 推广管理 → 网站管理 → 新建网站（网站名填「羊毛AIHUB」，网址填 https://chenking-maker.github.io/yangmao-aihub/，一般即时通过）→ 把拿到的网站ID 配成 JD_SITE_ID 即可",
+  "2001703": "网站推广位还没通过京东审核（jd_root.txt 验证文件已就位，回联盟后台点「完成验证」后等审核状态变成「已通过」，本通道自动生效）",
   "1002024": "siteId不能为空：按 2001701 的解法建一个网站推广位，把网站ID 配成 JD_SITE_ID",
   "21": "appKey 无效或签名不通过（检查 JD_APP_KEY / JD_APP_SECRET 是否成对）",
   "2001602": "账号未签署联盟协议或没有母账号权限",
@@ -188,7 +189,7 @@ function jdHint(code, desc) {
 }
 /* 「软失败」= 配置或权限还没到位（不是服务挂了），不该触发告警轰炸，只提示一次。 */
 function jdSoft(code, desc) {
-  return /403|2001701|1002024|^21$|未配置|invalid app_key/i.test(String(code || "") + " " + String(desc || ""));
+  return /403|2001701|2001703|1002024|^21$|未配置|invalid app_key/i.test(String(code || "") + " " + String(desc || ""));
 }
 
 /* ---------- 万能转链 ----------
@@ -204,17 +205,19 @@ export async function jdUniversal(env, materialUrl, opts) {
   if (!jdReady(env) || !materialUrl) return null;
 
   function reqOf(chainType) {
-    return {
+    /* ⚠️ 空值字段必须剔除：京东网关对空串/0 的可选参数会抛 67「网关依赖服务异常」，
+     * 表现为玄学失败。只传有值的字段。 */
+    var req = {
       materialId: String(materialUrl),
       siteId: String(env.JD_SITE_ID || ""),
-      positionId: Number(opts.positionId || 0),
-      subUnionId: String(env.JD_SUB_UNION_ID || "yangmao"),
-      /* 联盟ID：部分账号的接口按 unionId 归因，传上更稳（有就带，没有留空） */
-      unionId: String(env.JD_UNION_ID || ""),
-      pid: String(env.JD_PID || ""),
-      couponUrl: String(opts.couponUrl || ""),
       chainType: Number(chainType || 1)
     };
+    if (env.JD_SUB_UNION_ID) req.subUnionId = String(env.JD_SUB_UNION_ID);
+    if (env.JD_UNION_ID) req.unionId = String(env.JD_UNION_ID);
+    if (opts.positionId) req.positionId = Number(opts.positionId);
+    if (env.JD_PID) req.pid = String(env.JD_PID);
+    if (opts.couponUrl) req.couponUrl = String(opts.couponUrl);
+    return req;
   }
 
   var methods = ["jd.union.open.promotion.bysubunionid.get", "jd.union.open.promotion.common.get"];
@@ -243,8 +246,8 @@ export async function jdUniversal(env, materialUrl, opts) {
       lastErr = jdHint(r.code, r.desc);
       lastCode = r.code;
       soft = soft || jdSoft(r.code, r.desc);
-      /* 权限没开通 / appKey 无效 / siteId 不合法：换 chainType 重试也是同样结果 */
-      if (/403|2001701|1002024|^21$|Invalid app_key|no-node|bad-json/i.test(String(r.code))) break;
+      /* 权限没开通 / appKey 无效 / siteId 不合法或未过审：换 chainType 重试也是同样结果 */
+      if (/403|2001701|2001703|1002024|^21$|Invalid app_key|no-node|bad-json/i.test(String(r.code))) break;
     }
   }
   return { error: lastErr, code: lastCode, soft: soft };
