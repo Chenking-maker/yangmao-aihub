@@ -1,0 +1,26 @@
+import { chromium } from "file:///C:/Users/37054/.workbuddy/binaries/node/workspace/node_modules/playwright-core/index.mjs";
+const W = "https://yangmao-aihub.370542303.workers.dev";
+const G = "https://chenking-maker.github.io/yangmao-aihub/";
+const browser = await chromium.launch({ channel: "chrome", headless: true, proxy: { server: "http://127.0.0.1:7897" }, args: ["--no-sandbox"] });
+const req = (await browser.newContext()).request;
+const log = (...a) => console.log(...a);
+const getj = async (u, opt) => { const r = await req.fetch(u, opt); return { s: r.status(), j: await r.json().catch(() => null) }; };
+
+const op = await req.fetch(W + "/api/redpacket", { method: "OPTIONS", headers: { origin: G, "access-control-request-method": "POST" } });
+log("1) 预检:", op.status());
+let r = await getj(W + "/api/activities");
+log("2) 会场:", r.s, r.j.length + "条", "返利", r.j.filter(a => a.rebate).length, "待开通", r.j.filter(a => a.needAuth).length, "无通道", r.j.filter(a => !a.rebate && !a.needAuth).length);
+const tb = r.j.find(a => a.name.includes("超级红包"));
+r = await getj(W + "/api/redpacket", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ activityId: tb.activityId, activityUrl: tb.url, title: tb.name, channel: tb.channel }) });
+log("3) 超级红包转链:", r.j.rebate ? "✅" : "❌", String(r.j.url || JSON.stringify(r.j)).slice(0, 55));
+const mt = r.j || null;
+const life = await getj(W + "/api/life/business");
+log("4) 本地生活:", life.j.items.length + "项");
+const lid = life.j.items[0].id;
+const ll = await getj(W + "/api/life/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: lid }) });
+log("   取链[" + lid + "]:", ll.s, String(ll.j.url || JSON.stringify(ll.j)).slice(0, 55));
+const hd = await getj(W + "/api/health?deep=1");
+log("5) 深度体检:", hd.j.items.map(i => i.ok ? "✅" : "🔴").join(""));
+const at = await getj(W + "/api/alert/test?token=woolalert-20261016");
+log("6) 告警端点:", at.s, "mail:", JSON.stringify(at.j.mail).slice(0, 90));
+await browser.close();

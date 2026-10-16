@@ -43,6 +43,28 @@ function cacheSet(key, data) {
   memCache.set(key, { data, expire: Date.now() + CACHE_TTL * 1000 });
 }
 
+/* 重接口专用「过期缓存兜底」（stale-while-revalidate）：
+ * 10 分钟内直接命中；10 分钟~1 小时之间先返回旧数据、后台静默刷新 ——
+ * 好单库核验链路较重（一次要探好几条转链），绝不能让用户干等冷启动。 */
+const HEAVY_STALE = 3600;
+async function swr(ctx, key, build) {
+  const hit = memCache.get(key);
+  const now = Date.now();
+  if (hit) {
+    const age = (now - hit.t) / 1000;
+    if (age < CACHE_TTL) return hit.data;
+    if (age < HEAVY_STALE && ctx && ctx.waitUntil) {
+      ctx.waitUntil(Promise.resolve().then(build)
+        .then((d) => { memCache.set(key, { data: d, t: Date.now() }); })
+        .catch(() => { /* 刷新失败继续用旧的 */ }));
+      return hit.data;
+    }
+  }
+  const d = await build();
+  memCache.set(key, { data: d, t: now });
+  return d;
+}
+
 const rateMap = new Map();
 function rateLimit(ip) {
   const now = Date.now();
@@ -382,9 +404,9 @@ async function lifeBusinessList(env) {
   }
 
   // 限并发 + 超时校验：取不到链接的活动直接不展示，避免用户点了报错
-  await pool(cand.slice(0, 14), 4, async function (c) {
+  await pool(cand.slice(0, 10), 5, async function (c) {
     try {
-      const u = await withTimeout(hdkMeituanLink(env, c.id, 1), 6000, "life转链");
+      const u = await withTimeout(hdkMeituanLink(env, c.id, 1), 5000, "life转链");
       if (u) out.push(c.item);
     } catch (e) { /* 超时/失败都跳过 */ }
   });
@@ -506,7 +528,7 @@ async function scheduledHealth(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     // CORS 预检：必须返回「无 body 的 204」+ CORS 头。
     // 注意：不能用 json({}, 204)——Response 在 204 状态下不允许带 body，
@@ -549,13 +571,11 @@ export default {
       if (url.pathname === "/api/activities") {
         if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
         const kw = url.searchParams.get("q") || "";
-        const key = "a:" + kw;
-        let data = cacheGet(key);
-        if (!data) {
-          data = await hdkActivityList(env, 1, kw);
-          await verifyActivities(env, data, 20);
-          cacheSet(key, data);
-        }
+        const data = await swr(ctx, "a:" + kw, async () => {
+          const list = await hdkActivityList(env, 1, kw);
+          await verifyActivities(env, list, 12);   // 只核验前 9 条（展示的主力），其余不打标也不误标
+          return list;
+        });
         return json(data);
       }
 
@@ -652,8 +672,7 @@ export default {
 
       /* ---- 本地生活：热门业务列表（美团走好单库，零第三方凭据）---- */
       if (url.pathname === "/api/life/business") {
-        var items = cacheGet("life:biz2");
-        if (!items) { items = await lifeBusinessList(env); cacheSet("life:biz2", items); }
+        const items = await swr(ctx, "life:biz2", () => lifeBusinessList(env));
         return json({ configured: !!(items && items.length), items: items || [] });
       }
 

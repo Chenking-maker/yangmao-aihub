@@ -276,15 +276,17 @@ export async function pool(items, n, fn) {
  */
 export async function verifyActivities(env, list, limit) {
   var items = (list || []).slice(0, limit || 12);
-  await pool(items, 5, async function (a) {
+  // 先全部清零（normalizeActivity 里的 rebate 是启发式预估，未经实测的一律不打标）
+  (list || []).forEach(function (a) { a.rebate = false; delete a.needAuth; });
+  await pool(items, 6, async function (a) {
     if (!a.channel) { a.rebate = false; return; }
     try {
       if (a.channel === "tb") {
-        a.rebate = !!(await withTimeout(tbConference(env, a.activityId, a.url, (a.name || "活动") + "会场入口领取"), 6000, "tb转链"));
+        a.rebate = !!(await withTimeout(tbConference(env, a.activityId, a.url, (a.name || "活动") + "会场入口领取"), 5000, "tb转链"));
       } else if (a.channel === "mt") {
-        a.rebate = !!(a.activityId && (await withTimeout(hdkMeituanLink(env, a.activityId, 1), 6000, "mt转链")));
+        a.rebate = !!(a.activityId && (await withTimeout(hdkMeituanLink(env, a.activityId, 1), 5000, "mt转链")));
       } else if (a.channel === "jd") {
-        var r = await withTimeout(jdConference(env, a.url, a.name), 6000, "jd转链");
+        var r = await withTimeout(jdConference(env, a.url, a.name), 5000, "jd转链");
         a.rebate = !!(r && r.url);
         a.needAuth = !!(r && r.needAuth);
       }
