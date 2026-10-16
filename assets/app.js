@@ -147,14 +147,7 @@
       W.openCoupon(p);
     });
     var img = el.querySelector(".sk-img img");
-    if (img) {
-      var retried = false;
-      img.addEventListener("error", function () {
-        var direct = img.getAttribute("data-direct");
-        if (!retried && direct) { retried = true; img.removeAttribute("referrerpolicy"); img.src = direct; }
-        else { img.remove(); el.querySelector(".sk-img").textContent = p.icon || "图"; }
-      });
-    }
+    if (img) W.bindImgFallback(img, p.pic, el.querySelector(".sk-img"), p.icon || "图");
     return el;
   }
   function loadSeckill() {

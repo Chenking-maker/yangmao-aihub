@@ -5,6 +5,13 @@
  */
 (function () {
   "use strict";
+  /* 图片三级降级：缩放图 → 代理 → 原图 → 占位（两大图床原图 100~300KB，
+   * 而这里只按 48px 展示，所以统一按 112px 请求缩放图） */
+  function bindCtImgs(root) {
+    (root || document).querySelectorAll("img.ct-img").forEach(function (img) {
+      W.bindImgFallback(img, img.getAttribute("data-orig") || "", img.parentNode, "图");
+    });
+  }
   var W = window.WOOL;
   var $ = W.$;
 
@@ -86,7 +93,7 @@
       var row = document.createElement("div");
       row.className = "ct-row" + (it.manual ? " manual" : "");
       var img = it.pic
-        ? '<img src="' + API_BASE + '/api/img?u=' + encodeURIComponent(it.pic) + '" referrerpolicy="no-referrer" alt="">'
+        ? '<img class="ct-img" width="48" height="48" src="' + W.imgThumb(it.pic, 112) + '" data-orig="' + W.esc(it.pic) + '" referrerpolicy="no-referrer" alt="">'
         : '<span class="ct-row-noimg">图</span>';
       row.innerHTML =
         '<div class="ct-row-img">' + img + '</div>' +
@@ -118,6 +125,7 @@
         it.qty = v; save(); renderAll();
       });
       box.appendChild(row);
+      bindCtImgs(row);
     });
   }
 
@@ -142,7 +150,7 @@
     var el = document.createElement("div");
     var endPrice = Number(p.endPrice) || 0;
     var img = p.pic
-      ? '<img src="' + API_BASE + '/api/img?u=' + encodeURIComponent(p.pic) + '" referrerpolicy="no-referrer" alt="">'
+      ? '<img class="ct-img" width="48" height="48" src="' + W.imgThumb(p.pic, 112) + '" data-orig="' + W.esc(p.pic) + '" referrerpolicy="no-referrer" alt="">'
       : '<span class="ct-row-noimg">图</span>';
     var left = gap - endPrice;
     el.className = "ct-rec";
@@ -181,7 +189,7 @@
       return;
     }
     tip.textContent = "还差 ¥" + fmt(s.gap) + " 拿满「每满 " + s.per + " 减 " + s.cut + "」，这些商品刚好补差（按到手价从高到低）：";
-    fits.forEach(function (p) { box.appendChild(recCard(p, s.gap)); });
+    fits.forEach(function (p) { var c = recCard(p, s.gap); box.appendChild(c); bindCtImgs(c); });
   }
 
   function loadPool() {
@@ -243,7 +251,7 @@
         var el = document.createElement("div");
         el.className = "ct-sr-item";
         var img = p.pic
-          ? '<img src="' + API_BASE + '/api/img?u=' + encodeURIComponent(p.pic) + '" referrerpolicy="no-referrer" alt="">'
+          ? '<img class="ct-img" width="48" height="48" src="' + W.imgThumb(p.pic, 112) + '" data-orig="' + W.esc(p.pic) + '" referrerpolicy="no-referrer" alt="">'
           : '<span class="ct-row-noimg">图</span>';
         el.innerHTML =
           '<div class="ct-rec-img">' + img + '</div>' +
@@ -255,6 +263,7 @@
           '<button class="ct-btn small primary">＋ 加入</button>';
         el.querySelector("button").addEventListener("click", function () { addItem(p); });
         list.appendChild(el);
+        bindCtImgs(el);
       });
     }).catch(function () {
       list.innerHTML = '<div class="empty-note">网络开小差了，重试 ›</div>';

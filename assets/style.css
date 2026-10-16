@@ -309,6 +309,28 @@ button { font-family: inherit; cursor: pointer; }
 .rp-msg-btn.ghost { background: transparent; border: 1px solid var(--hairline-2); color: var(--text-2); }
 .rp-msg-btn:hover { filter: brightness(1.05); }
 
+/* 转链卡里的淘口令行：口令比链接长，允许换行 + 等宽显示，一眼能核对 */
+.conv-tao {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 6px; padding: 6px 8px; border-radius: var(--r-sm);
+  background: var(--surface-2); border: 1px dashed var(--hairline-2);
+}
+.conv-tao-k {
+  flex: none; font-size: 11px; font-weight: 600; color: var(--gold);
+  padding: 1px 6px; border-radius: 4px; background: var(--gold-bg);
+}
+.conv-tao-v {
+  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--text-2); word-break: break-all;
+}
+
+/* 窄屏（手机）下转链卡改两行：信息占整行，按钮换行到下面，
+ * 否则右侧两个固定宽按钮把信息区挤成一个字一行的竖排 */
+@media (max-width: 480px) {
+  .rp-msg-card { flex-wrap: wrap; }
+  .rp-msg-actions { width: calc(100% - 44px); margin-left: 44px; margin-top: 8px; justify-content: flex-end; }
+}
+
 .typing { display: inline-flex; gap: 4px; padding: 4px 0; }
 .typing i {
   width: 6px; height: 6px; border-radius: 50%; background: var(--text-3);

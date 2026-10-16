@@ -100,7 +100,7 @@
       var el = document.createElement("div");
       el.className = "top-row";
       var thumb = t.pic
-        ? '<img loading="lazy" src="' + W.API_BASE + '/api/img?u=' + encodeURIComponent(t.pic) + '" referrerpolicy="no-referrer" alt="">'
+        ? '<img class="d-img" loading="lazy" width="42" height="42" src="' + W.imgThumb(t.pic, 96) + '" data-orig="' + W.esc(t.pic) + '" referrerpolicy="no-referrer" alt="">'
         : '<span class="top-ph">' + (i + 1) + '</span>';
       el.innerHTML =
         '<span class="top-rank r' + (i + 1) + '">' + (i + 1) + '</span>' +
@@ -115,6 +115,9 @@
         W.openCoupon({ id: t.id, title: t.title, price: t.price, endPrice: t.endPrice, coupon: t.coupon });
       });
       top.appendChild(el);
+      el.querySelectorAll("img.d-img").forEach(function (img) {
+        W.bindImgFallback(img, img.getAttribute("data-orig") || "", img.parentNode, "");
+      });
     });
   }
 

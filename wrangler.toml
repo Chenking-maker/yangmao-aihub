@@ -40,7 +40,15 @@ JD_RED_WORD = "WFYsTBsVnM4UkQzm！"
 # ⚠️ 本仓库是公开仓库（GitHub Pages 就是从它发布的），secretKey 绝不能写进这个文件，
 #    JD_APP_SECRET 请在 Cloudflare 后台配成 Secret —— 见文件末尾「密钥配置」。
 JD_APP_KEY = "8031b78d1ff40fdfc7986509d5fc2cd9"
-JD_SITE_ID = "4100978103"          # 导购媒体 ID
+# ⚠️ 实测（2026-10-16）：JD_SITE_ID 现在填的是「导购媒体ID 4100978103」，
+#    而京东转链接口**明确拒绝导购媒体ID**（错误码 2001701「不支持siteId用于此种方式推广」），
+#    只认「网站ID / APP ID」。换成网站ID 后本通道立即生效，不用改任何代码：
+#      union.jd.com → 推广管理 → 网站管理 → 新建网站
+#      （网站名：羊毛AIHUB，网址：https://chenking-maker.github.io/yangmao-aihub/，一般即时通过）
+#      → 把生成的「网站ID」填到下面 JD_SITE_ID
+JD_SITE_ID = "4100978103"          # ← 待换成「网站ID」
+# 京东联盟ID（账户管理里可见）：转链时带上，按账号归因更稳
+JD_UNION_ID = "1000559363"
 # JD_APP_SECRET 不在此处写（见文末「密钥配置」）
 # 可选：子推广位（渠道标识，用来区分流量来源）
 JD_SUB_UNION_ID = "yangmao"

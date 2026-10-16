@@ -175,7 +175,10 @@
 
     var imgsHtml = (it.images && it.images.length)
       ? '<div class="wire-imgs">' + it.images.map(function (u) {
-          return '<img loading="lazy" decoding="async" src="' + API_BASE + '/api/img?u=' + encodeURIComponent(u) + '" referrerpolicy="no-referrer" alt="">';
+          /* 88px 缩略图：按 176px 请求缩放图（实测比原图省 80%+ 流量），
+           * 失败自动降级代理/原图；显式宽高防止移动端布局抖动 */
+          return '<img class="wire-img" loading="lazy" decoding="async" width="88" height="88" ' +
+            'src="' + W.imgThumb(u, 176) + '" data-orig="' + W.esc(u) + '" referrerpolicy="no-referrer" alt="">';
         }).join("") + '</div>'
       : "";
 
@@ -232,6 +235,11 @@
         });
       });
     });
+
+    // 图片三级降级：缩放图 → 代理 → 原图 → 隐藏
+    card.querySelectorAll(".wire-img").forEach(function (img) {
+      W.bindImgFallback(img, img.getAttribute("data-orig") || "", null, "");
+    });
     return card;
   }
 
@@ -276,9 +284,27 @@
     return hours >= 48 ? Math.round(hours / 24) + " 天" : hours + " 小时";
   }
 
-  var WIRE_BATCH = 24;
+  var WIRE_BATCH = 12;
 
-  /* 一次几十上百条线报，分批渲染：先出 24 条，剩下的点「加载更多」 */
+  /* 会话级缓存：同一标签页内反复打开线报广场时先秒出旧数据，再后台换新。
+   * 移动端「打开慢」的一半原因是每次重开都重新等接口、重新下几十张图。 */
+  function wireCacheKey(tab) { return "wool:wire:" + tab.key; }
+  function wireCacheGet(tab) {
+    try {
+      var raw = sessionStorage.getItem(wireCacheKey(tab));
+      if (!raw) return null;
+      var o = JSON.parse(raw);
+      if (!o || !o.t || !o.d) return null;
+      if (Date.now() - o.t > 10 * 60 * 1000) return null;
+      return o;
+    } catch (e) { return null; }
+  }
+  function wireCachePut(tab, d) {
+    try { sessionStorage.setItem(wireCacheKey(tab), JSON.stringify({ t: Date.now(), d: d })); } catch (e) { /* 配额满就放弃 */ }
+  }
+
+  /* 一次几十上百条线报，分批渲染：先出 12 条，剩下的点「加载更多」。
+   * 移动端首屏只出 12 条 —— 少一半 DOM 节点和图片请求，滚动照样顺畅。 */
   function renderBatch(items, from) {
     var end = Math.min(items.length, from + WIRE_BATCH);
     for (var i = from; i < end; i++) listEl.appendChild(renderWireItem(items[i]));
@@ -294,11 +320,40 @@
     }
   }
 
-  function loadList(tab) {
+  function paintMeta(tab, d) {
+    var items = (d && d.items) || [];
+    if (tab.src === "material") {
+      metaEl.innerHTML = '共 <b>' + items.length + '</b> 条推荐好物 · 点卡片右上角 ⭐ 收藏整条，商品行点「收藏」存单个宝贝';
+    } else {
+      var hours = (d && d.hours) || tab.hours;
+      var max = (d && d.max) || tab.max;
+      metaEl.innerHTML = '最近 <b>' + windowText(hours) + '</b> 共 <b>' + items.length +
+        '</b> 条线报（最多保留 ' + max + ' 条，最新在前）· ⭐ 可收藏整条或单个宝贝';
+    }
+  }
+
+  function paintList(tab, d) {
+    listEl.innerHTML = "";
+    var items = (d && d.items) || [];
+    if (!items.length) { showEmpty(tab); return; }
+    paintMeta(tab, d);
+    renderBatch(items, 0);
+  }
+
+  function loadList(tab, opts) {
+    opts = opts || {};
     loading = true;
     setRefreshing(true);
     metaEl.textContent = "";
-    showSkeleton();
+    var cached = opts.force ? null : wireCacheGet(tab);
+    if (cached) {
+      /* 先秒出缓存数据（界面立刻有内容），再后台拉新的 */
+      paintList(tab, cached.d);
+      loading = false;
+      setRefreshing(false);
+    } else {
+      showSkeleton();
+    }
     var url = tab.src === "material"
       ? "/api/wire?sub=material&tag=" + encodeURIComponent(tab.q)
       : "/api/wire?sub=list&type=" + encodeURIComponent(tab.q) +
@@ -306,32 +361,31 @@
     apiGet(url).then(function (d) {
       loading = false;
       setRefreshing(false);
-      listEl.innerHTML = "";
-      var items = (d && d.items) || [];
-      if (!items.length) { showEmpty(tab); return; }
-      if (tab.src === "material") {
-        metaEl.innerHTML = '共 <b>' + items.length + '</b> 条推荐好物 · 点卡片右上角 ⭐ 收藏整条，商品行点「收藏」存单个宝贝';
-      } else {
-        var hours = (d && d.hours) || tab.hours;
-        var max = (d && d.max) || tab.max;
-        metaEl.innerHTML = '最近 <b>' + windowText(hours) + '</b> 共 <b>' + items.length +
-          '</b> 条线报（最多保留 ' + max + ' 条，最新在前）· ⭐ 可收藏整条或单个宝贝';
-      }
-      renderBatch(items, 0);
+      wireCachePut(tab, d);
+      /* 跟缓存比对：没变化就只更新计数，不重排整个列表（避免刷新时画面闪跳） */
+      var fresh = (d && d.items) || [];
+      var old = cached ? ((cached.d && cached.d.items) || []) : null;
+      var same = !!old && old.length === fresh.length &&
+        (!fresh.length || (!!old[0] && !!fresh[0] && old[0].id === fresh[0].id));
+      if (same) { paintMeta(tab, d); return; }
+      paintList(tab, d);
     }).catch(function () {
       loading = false;
       setRefreshing(false);
-      listEl.innerHTML =
-        '<div class="wire-empty">' +
-          '<div class="wire-empty-ico">📡</div>' +
-          '<div class="wire-empty-text">网络开小差了，刷新页面试试</div>' +
-        '</div>';
+      if (!cached) {
+        listEl.innerHTML =
+          '<div class="wire-empty">' +
+            '<div class="wire-empty-ico">📡</div>' +
+            '<div class="wire-empty-text">网络开小差了，刷新页面试试</div>' +
+          '</div>';
+      }
+      /* 有缓存就静默失败：用户已经在看旧数据，不弹错误打扰 */
     });
   }
 
   refreshBtn.addEventListener("click", function () {
     var tab = TABS.filter(function (t) { return t.key === current; })[0];
-    loadList(tab);
+    loadList(tab, { force: true });
   });
 
   loadList(TABS[0]);

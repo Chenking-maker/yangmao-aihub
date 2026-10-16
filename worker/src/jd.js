@@ -174,8 +174,8 @@ async function jdInvoke(env, method, biz, timeoutMs) {
  */
 var JD_HINT = {
   "403": "该应用未开通「社交媒体转链」接口权限（jd.union.open.promotion.bysubunionid.get）。去 union.jd.com 联系联盟客服或发邮件 cps@jd.com 申请，开通后本通道自动生效，不用改代码",
-  "2001701": "转链接口禁止使用「导购媒体ID」，只认「网站ID / APP ID」（京东联盟 → 推广管理 → 网站管理 / APP管理 里查看），或改申请社交媒体转链接口权限",
-  "1002024": "siteId 不能为空：请在 Cloudflare 后台补上 JD_SITE_ID（网站ID 或 APP ID）",
+  "2001701": "转链接口禁止使用「导购媒体ID」，只认「网站ID / APP ID」。最快的解法：union.jd.com → 推广管理 → 网站管理 → 新建网站（网站名填「羊毛AIHUB」，网址填 https://chenking-maker.github.io/yangmao-aihub/，一般即时通过）→ 把拿到的网站ID 配成 JD_SITE_ID 即可",
+  "1002024": "siteId不能为空：按 2001701 的解法建一个网站推广位，把网站ID 配成 JD_SITE_ID",
   "21": "appKey 无效或签名不通过（检查 JD_APP_KEY / JD_APP_SECRET 是否成对）",
   "2001602": "账号未签署联盟协议或没有母账号权限",
   "2001403": "无调用权限，请联系联盟运营申请"
@@ -209,6 +209,8 @@ export async function jdUniversal(env, materialUrl, opts) {
       siteId: String(env.JD_SITE_ID || ""),
       positionId: Number(opts.positionId || 0),
       subUnionId: String(env.JD_SUB_UNION_ID || "yangmao"),
+      /* 联盟ID：部分账号的接口按 unionId 归因，传上更稳（有就带，没有留空） */
+      unionId: String(env.JD_UNION_ID || ""),
       pid: String(env.JD_PID || ""),
       couponUrl: String(opts.couponUrl || ""),
       chainType: Number(chainType || 1)

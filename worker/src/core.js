@@ -851,6 +851,7 @@ export async function convertLink(env, text) {
 
   if (m.kind === "jd") {
     /* ① 京东联盟官方万能转链：商品页 / 会场 / u.jd.com 短链都吃得下，佣金归自己 */
+    var jdReason = "";
     if (jdReady(env)) {
       var target = m.materialId.indexOf("http") === 0 ? m.materialId : (rawUrl || m.materialId);
       var off = await jdUniversal(env, target, { couponUrl: m.couponUrl, timeout: 8000 });
@@ -864,8 +865,9 @@ export async function convertLink(env, text) {
           note: m.couponUrl ? "已转好你的京东链接，券也一起带上啦" : "已转好你的京东链接"
         };
       }
+      jdReason = (off && off.error) || "";
     }
-    var jd = await hdkJdRelink(env, m.materialId, m.couponUrl);
+    var jd = await withTimeout(hdkJdRelink(env, m.materialId, m.couponUrl), 10000, "jd-relink").catch(function () { return null; });
     if (jd) {
       return {
         platform: "京东",
@@ -877,12 +879,19 @@ export async function convertLink(env, text) {
       };
     }
     var jdFallback = rawUrl || (m.materialId.indexOf("http") === 0 ? m.materialId : "");
+    /* 把「为什么没转成」用最短的一句讲清楚（完整排查步骤在 /api/health?deep=1 的探针里） */
+    var why = "";
+    if (jdReason && !/未配置/.test(jdReason)) {
+      why = "（" + String(jdReason).split("。")[0].slice(0, 42) + "）";
+    }
     return {
       platform: "京东",
       converted: false,
       url: jdFallback,
       couponUrl: m.couponUrl,
-      note: jdFallback ? "这条京东链接暂时转不了返利，先给你打开原链接" : "这条京东链接暂时转不了，换一个试试"
+      note: (jdFallback
+        ? "这条京东链接暂时走不了优惠通道，先给你打开原链接" + why
+        : "这条京东链接暂时转不了，换一个试试" + why)
     };
   }
 
@@ -896,7 +905,9 @@ export async function convertLink(env, text) {
     };
   }
 
-  var relink = await hdkRelink(env, m.materialId, "用户分享好物");
+  /* 好单库转链在 Cloudflare 边缘单次要 7~20 秒（本地 0.2s），干等会把对话/线报
+   * 一起拖死。10 秒拿不到就降级：至少把原链接给用户点上，转链在后台重试没必要。 */
+  var relink = await withTimeout(hdkRelink(env, m.materialId, "用户分享好物"), 10000, "relink").catch(function () { return null; });
   if (relink && relink.url) {
     return {
       platform: m.platform,

@@ -65,25 +65,36 @@
     }
 
     /* ---------- 转链卡 ---------- */
-    function linkCardHtml(r) {
-      var jd = r.platform === "京东";
-      var status = r.converted
-        ? '<span class="badge-coupon">已获取</span>'
-        : '<span class="wire-note">' + W.esc(r.note || "暂未转链") + '</span>';
-      var couponLine = (Number(r.coupon) > 0) ? '<div class="wire-note">这张券 ' + r.coupon + ' 元，下单一起抵现</div>' : '';
-      var actions = r.url
-        ? '<button class="rp-msg-btn" data-act="open">打开</button><button class="rp-msg-btn ghost" data-act="copy">复制</button>'
-        : (r.taoCode ? '<button class="rp-msg-btn" data-act="tao">复制淘口令</button>' : '');
-      var ico = jd ? "🎁" : "🧧";
-      return '<div class="rp-msg-card' + (jd ? " jd" : "") + '">' +
-        '<div class="rp-msg-ico">' + ico + '</div>' +
-        '<div class="rp-msg-info">' +
-          '<div class="rp-msg-name">' + (jd ? "京东" : "淘宝") + '链接 · 优惠通道</div>' +
-          '<div class="rp-msg-url">' + W.esc(r.url || (r.taoCode ? "已生成淘口令" : "待转链")) + '</div>' +
-        '</div>' +
-        '<div class="rp-msg-actions">' + actions + '</div>' +
-      '</div>' + status + couponLine;
-    }
+  function linkCardHtml(r) {
+    var jd = r.platform === "京东";
+    var url = String(r.url || "");
+    /* 链接很长，中间省略显示，完整链接放 title 里（悬停/长按可见） */
+    var short = url.length > 44 ? url.slice(0, 20) + "…" + url.slice(-14) : url;
+    var status = r.converted
+      ? '<span class="badge-coupon">已转成优惠链接</span>'
+      : '<span class="wire-note">' + W.esc(r.note || "暂未转链") + '</span>';
+    /* 淘口令单独一行：淘宝生态里口令比链接好用（微信里点不开链接，但口令能直接唤起 APP） */
+    var taoLine = r.taoCode
+      ? '<div class="conv-tao"><span class="conv-tao-k">淘口令</span>' +
+        '<span class="conv-tao-v">' + W.esc(r.taoCode) + '</span>' +
+        '<button class="rp-msg-btn ghost" data-act="tao">复制口令</button></div>'
+      : "";
+    var couponLine = (Number(r.coupon) > 0) ? '<div class="wire-note">这张券 ' + r.coupon + ' 元，下单一起抵现</div>' : '';
+    var btns = url
+      ? '<button class="rp-msg-btn" data-act="open">打开</button><button class="rp-msg-btn ghost" data-act="copy">复制链接</button>'
+      : (r.taoCode ? '<button class="rp-msg-btn" data-act="tao">复制淘口令</button>' : '');
+    var ico = jd ? "🎁" : "🧧";
+    return '<div class="rp-msg-card' + (jd ? " jd" : "") + '">' +
+      '<div class="rp-msg-ico">' + ico + '</div>' +
+      '<div class="rp-msg-info">' +
+        '<div class="rp-msg-name">' + (jd ? "京东" : "淘宝") + '链接 · 优惠通道</div>' +
+        '<div class="rp-msg-url" title="' + W.esc(url) + '">' +
+          W.esc(short || (r.taoCode ? "已生成淘口令（见下方）" : "待转链")) + '</div>' +
+        taoLine +
+      '</div>' +
+      '<div class="rp-msg-actions">' + btns + '</div>' +
+    '</div>' + status + couponLine;
+  }
 
     function bindCardActions(rootEl, links, redpackets) {
       rootEl.querySelectorAll(".rp-msg-card").forEach(function (card, i) {
@@ -144,6 +155,22 @@
     function removeTyping() { var t = $("typingMsg"); if (t) t.remove(); }
 
     /* ---------- 发送 ---------- */
+    /* 识别消息里有没有「可转链的物料」：淘宝/京东商品链接、淘口令 token。
+     * 命中就走 /api/convert 直转链 —— 不依赖 LLM（没配/超时都能用），
+     * 几百毫秒到 2 秒就出结果，比让 AI 绕一圈可靠得多。 */
+    function detectLink(text) {
+      var s = String(text || "");
+      if (!s) return false;
+      if (/https?:\/\//i.test(s)) {
+        if (/(taobao|tmall|tb\.cn|jd\.com|3\.cn)/i.test(s)) return true;
+      }
+      /* 淘口令/分享 token：10 位以上、中间带 - 的 base62 串 */
+      if (/\b[A-Za-z0-9]{10,}-[A-Za-z0-9]{10,}[A-Za-z0-9]*\b/.test(s)) return true;
+      /* 商品 id= 形式 */
+      if (/[?&]id=\d{6,}/.test(s)) return true;
+      return false;
+    }
+
     function sendChat(text) {
       text = (text || "").trim();
       if (!text || chatBusy) return;
@@ -158,7 +185,10 @@
         chatHistory.push({ role: "assistant", content: reply || "" });
         chatBusy = false; chatSend.disabled = false; chatInput.focus();
       }
-      if (state.llmReady) {
+      if (detectLink(text)) {
+        /* 发的是链接/口令 → 直接转链 */
+        convertModeReply(text, done);
+      } else if (state.llmReady) {
         W.apiPost("/api/chat", { messages: chatHistory.slice(-8) }).then(function (r) {
           if (r && r.reply !== undefined) done(r.reply, r.products, r.redpackets, r.links);
           else searchModeReply(text, done);
@@ -166,6 +196,22 @@
       } else {
         searchModeReply(text, done);
       }
+    }
+
+    /* ---------- 直转链：发链接 → 回优惠链接 + 口令 ---------- */
+    function convertModeReply(text, done) {
+      W.apiPost("/api/convert", { text: text }).then(function (r) {
+        if (!r || (!r.url && !r.taoCode)) {
+          done("这条我没转换出可用链接 —— 把淘宝/京东的**商品链接**或者**淘口令**再发我一次试试（要含 http 的那种）。", [], [], []);
+          return;
+        }
+        var reply = r.converted
+          ? "转好啦 👇 这就是你的优惠链接，点「打开」直接跳；淘口令可以复制后发微信好友，对方打开淘宝自动识别。"
+          : (r.note || "这条暂时转不了优惠通道，先把能打开的链接给你：");
+        done(reply, [], [], [r]);
+      }).catch(function () {
+        done("网络开小差了，转链没成功，再发一次链接试试？", [], [], []);
+      });
     }
 
     /* ---------- 无 LLM 降级：实时检索 ---------- */

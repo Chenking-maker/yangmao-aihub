@@ -54,8 +54,14 @@
     if (pf === "淘宝" || pf === "天猫") return "tm";
     return "";
   }
-  function picUrl(u) {
-    return W.API_BASE + "/api/img?u=" + encodeURIComponent(u);
+  /* 星标页图片：统一走缩放图（两大图床支持 URL 缩放，比原图省 80%+ 流量），
+   * 失败由调用方的 bindImgFallback 逐级降级到代理/原图 */
+  function picUrl(u, px) {
+    return W.imgThumb(u, px || 176);
+  }
+  /* 图片三级降级：缩放图 → 代理 → 原图 → 隐藏 */
+  function bindImg(img, original) {
+    W.bindImgFallback(img, original, null, "");
   }
 
   /* ---------- 转链并打开 ----------
@@ -157,7 +163,8 @@
 
     var imgs = (it.images && it.images.length)
       ? '<div class="star-wimgs">' + it.images.map(function (u) {
-          return '<img loading="lazy" decoding="async" src="' + picUrl(u) + '" referrerpolicy="no-referrer" alt="">';
+          return '<img class="star-img" loading="lazy" decoding="async" width="78" height="78" ' +
+            'src="' + picUrl(u, 176) + '" data-orig="' + W.esc(u) + '" referrerpolicy="no-referrer" alt="">';
         }).join("") + "</div>"
       : "";
 
@@ -219,7 +226,8 @@
     el.setAttribute("data-k", it.k);
 
     var pic = it.pic
-      ? '<img loading="lazy" src="' + picUrl(it.pic) + '" referrerpolicy="no-referrer" alt="">'
+      ? '<img class="star-img" loading="lazy" width="72" height="72" src="' + picUrl(it.pic, 160) +
+        '" data-orig="' + W.esc(it.pic) + '" referrerpolicy="no-referrer" alt="">'
       : '<span class="star-ph">' + (TYPE_ICO[it.type] || "⭐") + "</span>";
 
     var priceRow = (Number(it.price) > 0 || Number(it.endPrice) > 0)
@@ -415,7 +423,12 @@
     }
     grid.innerHTML = "";
     list.forEach(function (it) {
-      grid.appendChild(it.type === "wire" ? wireCard(it) : starCard(it));
+      var card = it.type === "wire" ? wireCard(it) : starCard(it);
+      grid.appendChild(card);
+      /* 图片三级降级：缩放图失败 → 代理 → 原图 */
+      card.querySelectorAll("img.star-img").forEach(function (img) {
+        bindImg(img, img.getAttribute("data-orig") || "");
+      });
     });
     paintSel();
   }
