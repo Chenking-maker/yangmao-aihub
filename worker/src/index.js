@@ -505,6 +505,19 @@ function reportText(rep, down) {
     "\n\n后台：https://dash.cloudflare.com（Workers & Pages → yangmao-aihub → Logs）";
 }
 
+/* 定时预热：cron 每 30 分钟把两个重接口的缓存刷热（会场返利核验 + 本地生活列表），
+ * 用户请求基本永远命中缓存，不再吃冷启动延迟 */
+async function warmup(env) {
+  try {
+    const list = await hdkActivityList(env, 1, "");
+    await verifyActivities(env, list, 12);
+    await heavySet("a:", list);
+  } catch (e) { /* ignore */ }
+  try {
+    await heavySet("life:biz2", await lifeBusinessList(env));
+  } catch (e) { /* ignore */ }
+}
+
 async function scheduledHealth(env) {
   if (!env.ALERT_MAIL_TO) return { skipped: "未配置 ALERT_MAIL_TO，跳过告警" };
   const rep = await deepHealth(env);
@@ -757,8 +770,10 @@ export default {
     }
   },
 
-  /* 定时任务：每 30 分钟全链路体检，异常发邮件（见 wrangler.toml [triggers]） */
+  /* 定时任务：每 30 分钟全链路体检（异常发邮件）+ 重接口缓存预热（见 wrangler.toml [triggers]） */
   async scheduled(event, env, ctx) {
-    return await scheduledHealth(env);
+    const rep = scheduledHealth(env);
+    if (ctx && ctx.waitUntil) ctx.waitUntil(warmup(env).catch(() => { /* ignore */ })); else await warmup(env).catch(() => { /* ignore */ });
+    return rep;
   }
 };
