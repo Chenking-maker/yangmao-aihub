@@ -165,7 +165,7 @@ export async function hdkActivityList(env, page, keyword) {
   return list.map(normalizeActivity);
 }
 
-/* 淘宝会场转链：createConference_code 返回归因链接 + 淘口令 + 短链 */
+/* 淘宝会场转链：createConference_code 返回归因链接 + 淘口令 + 短链（失败自动重试一次，防好单库限流） */
 async function tbConference(env, activityId, activityUrl, title) {
   if (!env.HDK_TB_NAME || !(activityId || activityUrl)) return null;
   var body = new URLSearchParams({
@@ -176,13 +176,17 @@ async function tbConference(env, activityId, activityUrl, title) {
   });
   if (activityId) body.set("activity_id", String(activityId));
   else body.set("activity_url", String(activityUrl));
-  try {
-    var res = await fetch("http://v2.api.haodanku.com/createConference_code", { method: "POST", body: body });
-    var j = await res.json();
-    if (j && (j.code === 1 || j.code === 200) && j.data && j.data.url) {
-      return { url: j.data.url, taoCode: j.data.tao_code || "", shortUrl: j.data.link || "" };
-    }
-  } catch (e) { /* 试下一条通道 */ }
+
+  for (var attempt = 0; attempt < 2; attempt++) {
+    if (attempt) await new Promise(function (r) { setTimeout(r, 700); });
+    try {
+      var res = await fetch("http://v2.api.haodanku.com/createConference_code", { method: "POST", body: body });
+      var j = await res.json();
+      if (j && (j.code === 1 || j.code === 200) && j.data && j.data.url) {
+        return { url: j.data.url, taoCode: j.data.tao_code || "", shortUrl: j.data.link || "" };
+      }
+    } catch (e) { /* 重试或放弃 */ }
+  }
   return null;
 }
 
@@ -319,6 +323,16 @@ export async function hdkMeituanLink(env, activityId, linkType) {
       if (j && Number(j.code) === 200 && j.data && j.data.url) return j.data.url;
     } catch (e) { /* 换下一种链接类型 */ }
   }
+  // 全部失败：可能是好单库限流，歇 700ms 再补试一次主类型
+  await new Promise(function (r) { setTimeout(r, 700); });
+  try {
+    var res2 = await fetch(HDK_BASE + "/meituan_ratesurl", {
+      method: "POST",
+      body: new URLSearchParams({ apikey: env.HDK_APIKEY, activity_id: String(activityId), link_type: String(types[0]), channel: "ck_hub" })
+    });
+    var j2 = await res2.json();
+    if (j2 && Number(j2.code) === 200 && j2.data && j2.data.url) return j2.data.url;
+  } catch (e) { /* 放弃 */ }
   return "";
 }
 

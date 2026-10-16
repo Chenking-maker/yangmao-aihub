@@ -9,6 +9,7 @@ compatibility_date = "2026-10-01"
 #   npx wrangler secret put HDK_TB_NAME
 #   npx wrangler secret put JD_UNION_ID
 #   npx wrangler secret put LLM_API_KEY
+#   npx wrangler secret put SMTP_PASS      # QQ 邮箱授权码（告警发信用）
 # 本地开发用 tools/.env（不进 Git）
 
 [vars]
@@ -16,7 +17,14 @@ LLM_BASE_URL = "https://api.siliconflow.cn/v1"
 LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 # AI 分级用模：复杂需求（凑单/比价/多轮规划）自动切到更强模型
 LLM_MODEL_SMART = "deepseek-ai/DeepSeek-V4.1-Flash"
+# 接口健康监控 + 邮件告警（SMTP_PASS 授权码是密钥，用 wrangler secret put 单独配）
+SMTP_HOST = "smtp.qq.com"
+SMTP_PORT = "465"
+SMTP_USER = "370542303@qq.com"
+SMTP_FROM = "370542303@qq.com"
+ALERT_MAIL_TO = "370542303@qq.com"
+ALERT_TOKEN = "woolalert-20261016"
 
-# 接口健康监控：每 30 分钟自检一次，异常发邮件告警
+# 每 30 分钟全链路自检一次，异常发邮件到 ALERT_MAIL_TO
 [triggers]
 crons = ["*/30 * * * *"]
