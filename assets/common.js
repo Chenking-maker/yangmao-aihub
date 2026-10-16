@@ -374,14 +374,25 @@
       } else { toast("打开淘宝 APP 搜索「超级红包」即可领取"); }
     }).catch(function () { toast("打开淘宝 APP 搜索「超级红包」即可领取"); });
   }
+  /* 京享红包：配了自己的固定推广链接就直接开（返利 100% 归自己），否则回落到会场转链 */
   function openJdRedpacket() {
+    apiGet("/api/links").then(function (L) {
+      if (L && L.jdRed) {
+        toast("已打开你的京东返利红包入口");
+        window.open(L.jdRed, "_blank", "noopener");
+        return;
+      }
+      openJdRedpacketViaActivity();
+    }).catch(function () { openJdRedpacketViaActivity(); });
+  }
+  function openJdRedpacketViaActivity() {
     apiGet("/api/activities").then(function (list) {
       if (Array.isArray(list) && list.length) {
         var a = findActivity(list, "京享红包") || findActivity(list, "京东");
         if (a) openActivity(a);
         else window.open("https://www.jd.com", "_blank", "noopener");
       } else { toast("打开京东 APP 搜索「京享红包」即可领取"); }
-    });
+    }).catch(function () { toast("打开京东 APP 搜索「京享红包」即可领取"); });
   }
 
   /* ---- AI 选品服务连通性提示 ----

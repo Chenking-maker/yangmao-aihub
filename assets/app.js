@@ -215,19 +215,47 @@
       grid.appendChild(el);
     });
   }
-  apiGet("/api/activities").then(function (list) {
+  /* 京东红包优先用「我自己的固定推广链接」：配了就直接开，返利 100% 归自己；
+     没配才回落到会场自动转链。顺手把京享红包口令挂出来一键复制。 */
+  var jdFixed = "";
+  var linkReady = apiGet("/api/links").then(function (L) {
+    if (L && L.jdRed) jdFixed = L.jdRed;
+    var wb = $("rpJdWordBtn");
+    if (wb && L && L.jdRedWord) {
+      wb.hidden = false;
+      wb.textContent = L.jdRedWord + " · 点我复制口令";
+      wb.addEventListener("click", function () {
+        W.copyText(L.jdRedWord, "口令已复制，打开京东 APP 搜索即可领红包");
+      });
+    }
+  }).catch(function () { /* 没配就算了，走默认通道 */ });
+
+  function bindJdBtn(fallbackActivity) {
+    $("rpJdBtn").addEventListener("click", function () {
+      if (jdFixed) {
+        window.open(jdFixed, "_blank", "noopener");
+        W.toast("已打开你的京东返利红包入口");
+        return;
+      }
+      if (fallbackActivity) { openRedpacket(fallbackActivity); return; }
+      W.toast("打开京东 APP 搜索「京享红包」即可领取");
+    });
+  }
+
+  Promise.all([linkReady, apiGet("/api/activities").catch(function () { return null; })]).then(function (arr) {
+    var list = arr[1];
     if (Array.isArray(list) && list.length) {
       state.activities = list; renderActivities();
       var tb = findActivity("超级红包") || findActivity("红包");
       var jd = findActivity("京享红包") || findActivity("京东");
       $("rpTbBtn").addEventListener("click", function () { openRedpacket(tb); });
-      $("rpJdBtn").addEventListener("click", function () { openRedpacket(jd); });
+      bindJdBtn(jd);
       if (tb) document.querySelector("#redpacket .rp-name").textContent = "淘宝 · " + tb.name;
+    } else {
+      renderActivities();
+      $("rpTbBtn").addEventListener("click", function () { W.toast("打开淘宝 APP 搜索「超级红包」即可领取"); });
+      bindJdBtn(null);
     }
-  }).catch(function () {
-    renderActivities();
-    $("rpTbBtn").addEventListener("click", function () { toast("打开淘宝 APP 搜索「超级红包」即可领取"); });
-    $("rpJdBtn").addEventListener("click", function () { toast("打开京东 APP 搜索「京享红包」即可领取"); });
   });
 
   /* ---------- 双11 日历 ---------- */

@@ -15,8 +15,9 @@ import {
   hdkActivityList, hdkConference, relayActivity, verifyActivities,
   hdkWireCategories, hdkWireReport, hdkWireReportRecent, hdkMaterialCommunities, hdkMaterialItems,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
-  convertLink, proxyImage, dailyStats, bjDate
+  convertLink, proxyImage, dailyStats, bjDate, fixedLinks
 } from "../worker/src/core.js";
+import { jdProbe } from "../worker/src/jd.js";
 import { yzLifeBusinesses, yzPromotionLink } from "../worker/src/yunzhan.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -323,7 +324,12 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/api/health" && url.searchParams.get("deep") === "1") {
       const probe = async (name, fn) => {
         const t0 = Date.now();
-        try { const r = await fn(); return { name, ok: r === true, ms: Date.now() - t0, detail: typeof r === "string" ? r : "" }; }
+        try {
+          const r = await fn();
+          const note = typeof r === "string" ? r : "";
+          const ok = r === true || !!note || (r && r.ok === true);
+          return { name, ok, ms: Date.now() - t0, detail: note || (r && typeof r === "object" && r.detail ? r.detail : "") };
+        }
         catch (e) { return { name, ok: false, ms: Date.now() - t0, detail: String(e.message || e).slice(0, 220) }; }
       };
       const items = [
@@ -354,6 +360,14 @@ const server = createServer(async (req, res) => {
           });
           if (!r.ok) throw new Error("LLM " + r.status);
           return true;
+        }),
+        await probe("京东联盟官方转链", async () => {
+          const r = await jdProbe(env);
+          if (!r.ok) {
+            if (/未配置/.test(r.reason)) return "未配置 JD_APP_KEY / JD_APP_SECRET / JD_SITE_ID（京东链接走兜底通道，不算故障）";
+            throw new Error(r.reason);
+          }
+          return { ok: true, detail: r.url };
         })
       ];
       return json(res, { ts: Date.now(), items });
@@ -361,6 +375,11 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/api/health") {
       return json(res, { ok: true, hasKey: !!env.HDK_APIKEY, hasLLM: !!env.LLM_API_KEY });
+    }
+
+    /* 我的固定推广链接（红包按钮 / 口令复制用） */
+    if (url.pathname === "/api/links") {
+      return json(res, fixedLinks(env));
     }
 
     if (url.pathname === "/api/search") {

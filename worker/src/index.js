@@ -25,8 +25,9 @@ import {
   hdkActivityList, hdkConference, relayActivity, verifyActivities, withTimeout, pool,
   hdkWireCategories, hdkWireReport, hdkWireReportRecent, hdkMaterialCommunities, hdkMaterialItems,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
-  convertLink, proxyImage, dailyStats, bjDate
+  convertLink, proxyImage, dailyStats, bjDate, fixedLinks
 } from "./core.js";
+import { jdProbe } from "./jd.js";
 import { yzLifeBusinesses, yzPromotionLink } from "./yunzhan.js";
 import { sendAlert } from "./mailer.js";
 import { sendPush, htmlWrap } from "./push.js";
@@ -457,7 +458,14 @@ async function probe(name, fn) {
   const t0 = Date.now();
   try {
     const r = await withTimeout(fn(), 10000, name);
-    return { name, ok: r === true, ms: Date.now() - t0, detail: typeof r === "string" ? r : "" };
+    /* 返回字符串 = 「没配置，不算故障」（比如未配 LLM_API_KEY / 京东官方通道），
+       返回 true 或 { ok:true, detail } = 通了；抛异常 = 真的挂了会告警 */
+    const note = typeof r === "string" ? r : "";
+    const ok = r === true || !!note || (r && r.ok === true);
+    return {
+      name, ok, ms: Date.now() - t0,
+      detail: note || (r && typeof r === "object" && r.detail ? r.detail : "")
+    };
   } catch (e) {
     return { name, ok: false, ms: Date.now() - t0, detail: String(e.message || e).slice(0, 220) };
   }
@@ -497,6 +505,15 @@ async function deepHealth(env) {
     const res = await fetch(SITE_URL, { cf: { cacheTtl: 0 } });
     if (!res.ok) throw new Error("站点 " + res.status);
     return true;
+  }));
+  items.push(await probe("京东联盟官方转链", async () => {
+    const r = await jdProbe(env);
+    if (!r.ok) {
+      /* 没配置不算故障（京东链接自动走好单库/固定链接兜底）；配了却转不动才是故障 */
+      if (/未配置/.test(r.reason)) return "未配置 JD_APP_KEY / JD_APP_SECRET / JD_SITE_ID（京东链接走兜底通道，不算故障）";
+      throw new Error(r.reason);
+    }
+    return { ok: true, detail: r.url };
   }));
   return { ts: Date.now(), items };
 }
@@ -802,6 +819,11 @@ export default {
         const done = heavySet(key, data).catch(() => { /* ignore */ });
         if (ctx && ctx.waitUntil) ctx.waitUntil(done); else await done;
         return json(data);
+      }
+
+      /* ---- 我的固定推广链接（红包按钮 / 口令复制用；不含任何密钥）---- */
+      if (url.pathname === "/api/links") {
+        return json(fixedLinks(env));
       }
 
       /* ---- 健康检查：?deep=1 时做全链路体检 ---- */

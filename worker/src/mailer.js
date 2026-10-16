@@ -10,6 +10,8 @@
  *
  * 全部走环境变量，未配置时 sendMail() 安静返回 { sent:false }，不影响主流程。
  */
+
+import { sendPush } from "./push.js";
 function b64(s) {
   const bytes = new TextEncoder().encode(s);
   let bin = "";
@@ -109,13 +111,27 @@ async function smtpSend(env, { subject, text }) {
   }
 }
 
-/** 发告警邮件；未配置或失败都不抛异常（告警本身不能把主流程搞挂） */
+/** 发告警；未配置或失败都不抛异常（告警本身不能把主流程搞挂）
+ *  通道优先级：① QQ 邮箱 SMTP（配了授权码就走）→ ② 微信推送（PushPlus / 企业微信机器人）
+ *  所以没搞定邮箱授权码也不会漏告警 —— 配个 PushPlus token 一样收得到。 */
 export async function sendAlert(env, subject, text) {
-  if (!env.SMTP_USER || !env.SMTP_PASS) return { sent: false, reason: "SMTP 未配置（SMTP_USER / SMTP_PASS）" };
-  try {
-    await smtpSend(env, { subject: subject, text: text });
-    return { sent: true };
-  } catch (e) {
-    return { sent: false, reason: String(e.message || e) };
+  if (env.SMTP_USER && env.SMTP_PASS) {
+    try {
+      await smtpSend(env, { subject: subject, text: text });
+      return { sent: true, via: "smtp" };
+    } catch (e) {
+      /* 邮箱挂了还有微信兜底，别直接放弃 */
+      var fb = await sendPush(env, subject, preWrap(text));
+      if (fb && fb.sent) return { sent: true, via: "push(smtp失败)", smtpError: String(e.message || e) };
+      return { sent: false, reason: String(e.message || e) };
+    }
   }
+  var p = await sendPush(env, subject, preWrap(text));
+  if (p && p.sent) return { sent: true, via: "push" };
+  return { sent: false, reason: "SMTP 未配置（SMTP_USER / SMTP_PASS），微信推送也未配置（" + ((p && p.reason) || "") + "）" };
+}
+
+function preWrap(text) {
+  var safe = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return '<pre style="margin:0;font:13px/1.7 ui-monospace,Consolas,monospace;white-space:pre-wrap;color:#333">' + safe + "</pre>";
 }

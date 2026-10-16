@@ -5,8 +5,11 @@
  * 数据源对前端不可见，统一呈现为「AI 智能选品」。
  */
 
+import { jdUniversal, jdReady } from "./jd.js";
+
 export const HDK_BASE = "https://v3.api.haodanku.com";
 export const HDK_WWW = "https://www.haodanku.com";
+export { jdReady };
 
 /* ================= 商品 ================= */
 
@@ -207,11 +210,21 @@ async function tbConference(env, activityId, activityUrl, title) {
   return null;
 }
 
-/* 京东会场转链：未开通京东官方授权时明确回传 needAuth，前端据此提示用户去开通 */
+/* 京东会场转链：优先走京东联盟官方网关（自有账号，彻底绕开好单库）；
+ * 官方通道没配/失败时再试好单库；都不行则回传 needAuth 让前端给出配置引导。 */
 async function jdConference(env, activityUrl, title) {
   if (!activityUrl) return null;
+
+  /* ① 京东联盟官方万能转链（配了 JD_APP_KEY / JD_APP_SECRET / JD_SITE_ID 才生效） */
+  if (jdReady(env)) {
+    var o = await jdUniversal(env, activityUrl, { timeout: 6000 });
+    if (o && o.url) return { url: o.url, shortUrl: o.shortUrl || "", taoCode: "", via: "jd-api" };
+  }
+
+  /* ② 好单库统一转链口（只对「官方账号」通道有效） */
   var r = await hdkJdRelink(env, activityUrl);
   if (r && r.url) return { url: r.url, shortUrl: r.shortUrl || "", taoCode: "" };
+
   // 区分「没授权」和其他失败：探测一次授权状态
   try {
     var res = await fetch(HDK_BASE + "/unify_jditems_link", {
@@ -220,7 +233,7 @@ async function jdConference(env, activityUrl, title) {
     });
     var j = await res.json();
     if (j && Number(j.code) === 500 && /未开通/.test(String(j.msg || ""))) {
-      return { needAuth: true, authUrl: "https://publish.haodanku.com/Promotioncenter/auth?platform=2" };
+      return { needAuth: true, authUrl: "https://union.jd.com/proManager/custompromotion" };
     }
   } catch (e) { /* ignore */ }
   return null;
@@ -272,6 +285,22 @@ function fixedLink(env, name, platform) {
   if (/拼多多|多多/.test(hay)) return env.LINK_PDD || "";
   if (/抖音/.test(hay)) return env.LINK_DY || "";
   return "";
+}
+
+/* 给前端用的「我的固定推广链接」清单（红包按钮、口令复制都从这里取）。
+ * 这些都是推广链接，本来就是给人点的，暴露无风险；密钥不在这里。 */
+export function fixedLinks(env) {
+  env = env || {};
+  return {
+    jdMain: env.LINK_JD_MAIN || "",
+    jdRed: env.LINK_JD_RED || "",
+    jdWm: env.LINK_JD_WM || "",
+    pdd: env.LINK_PDD || "",
+    dy: env.LINK_DY || "",
+    jdRedWord: env.JD_RED_WORD || "",
+    channel: hdkChannel(env),
+    jdApi: jdReady(env)     // 京东联盟官方通道是否就绪（就绪则京东所有链接都能自动转）
+  };
 }
 
 /**
@@ -813,6 +842,21 @@ export async function convertLink(env, text) {
   var rawUrl = (String(text).match(/https?:\/\/[^\s"'，。）)]+/) || [""])[0];
 
   if (m.kind === "jd") {
+    /* ① 京东联盟官方万能转链：商品页 / 会场 / u.jd.com 短链都吃得下，佣金归自己 */
+    if (jdReady(env)) {
+      var target = m.materialId.indexOf("http") === 0 ? m.materialId : (rawUrl || m.materialId);
+      var off = await jdUniversal(env, target, { couponUrl: m.couponUrl, timeout: 8000 });
+      if (off && off.url) {
+        return {
+          platform: "京东",
+          converted: true,
+          url: off.url,
+          shortUrl: off.shortUrl || "",
+          couponUrl: m.couponUrl,
+          note: m.couponUrl ? "已转好你的京东链接，券也一起带上啦" : "已转好你的京东链接"
+        };
+      }
+    }
     var jd = await hdkJdRelink(env, m.materialId, m.couponUrl);
     if (jd) {
       return {

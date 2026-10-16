@@ -170,6 +170,18 @@ button { font-family: inherit; cursor: pointer; }
 .rp-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 .rp-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
 .rp-desc { font-size: 12.5px; color: var(--text-2); position: relative; }
+/* 京享红包口令：一键复制，去京东 APP 搜索粘贴 */
+.rp-word {
+  align-self: flex-start; margin-top: 2px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 99px; cursor: pointer;
+  background: var(--gold-bg); border: 1px dashed var(--gold-border);
+  color: var(--gold); font-size: 12px; font-family: var(--font-mono);
+  transition: background 0.15s, border-color 0.15s;
+}
+.rp-word::before { content: "🔑"; font-family: inherit; }
+.rp-word:hover { border-style: solid; }
+.rp-word[hidden] { display: none; }
 .rp-btn {
   margin-top: 4px; align-self: flex-start;
   display: inline-flex; align-items: center; gap: 7px;

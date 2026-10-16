@@ -25,12 +25,35 @@ HDK_CHANNEL = "yangmao"
 # 好单库开放平台的京东转链只认「官方账号」；自有账号的推广链接请在好单库后台
 # 「立即推广 → 渠道标识 yangmao」生成后粘贴到下面。留空则该平台走默认通道/直达入口。
 LINK_JD_MAIN = ""
-LINK_JD_RED = ""
+LINK_JD_RED = "https://u.jd.com/FD5LeHX"
 LINK_JD_WM = ""
 LINK_PDD = ""
 LINK_DY = "https://z.douyin.com/JImh7NBm"
+# 京享红包口令（首页红包卡上可一键复制，去京东 APP 搜索领取）
+JD_RED_WORD = "WFYsTBsVnM4UkQzm！"
+
+# ---- 京东联盟官方通道（自有账号直连 api.jd.com，彻底绕开好单库）----
+# 好消息：京东联盟的开放网关是公开的，拿到自己的 appKey/secretKey/siteId 就能
+# 转「任意」京东链接（商品页、会场、u.jd.com 短链都行），佣金 100% 归自己 ——
+# 也就是你在 union.jd.com/proManager/custompromotion 用的那个「万能转链」。
+# 获取方式（1 分钟，不用审核）：
+#   ① 打开 https://union.jd.com/myTools/myApi
+#   ② 复制 appKey / secretKey（有「网站/APP/导购媒体」推广位的话这里直接就有）
+#   ③ siteId = 该推广位的网站ID / APP ID / 导购媒体ID
+# 三个值配齐后，京东会场、京东实时线报里的商品链接全部自动转成你的推广链接。
+# JD_APP_SECRET 是密钥，建议用 wrangler secret put JD_APP_SECRET 配（不写进仓库）。
+JD_APP_KEY = ""
+JD_APP_SECRET = ""
+JD_SITE_ID = ""
+# 可选：子推广位（渠道标识，用来区分流量来源）
+JD_SUB_UNION_ID = "yangmao"
+# 可选：有的账号走 PID 而不是 siteId，填了就优先用
+JD_PID = ""
+# 可选：京东联盟 OAuth 拿到的 access_token（部分账号调用转链接口需要）
+JD_ACCESS_TOKEN = ""
 # 省钱日报的微信推送通道：PushPlus（个人微信扫码免费拿 token，填到 PUSH_TOKEN）
 # 或企业微信群机器人 webhook（填到 WECOM_WEBHOOK）。两个都不填则只生成日报、不推送。
+# 注意：接口异常告警也支持走这两个通道（没配 SMTP 授权码时的兜底）。
 
 # 定时任务：
 #  ① 每天 08:00（北京时间）= 生成「省钱日报」并推送微信

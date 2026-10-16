@@ -19,7 +19,7 @@
 
   /* 每个分类的窗口：hours=时间窗口（小时），max=最多保留条数 */
   var TABS = [
-    { key: "all", label: "全部", icon: "🧩", src: "wire", q: "0", hours: 12, max: 200 },
+    { key: "all", label: "全部", icon: "🧩", src: "wire", q: "0", hours: 12, max: 50 },
     { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "10367", hours: 168, max: 100 },
     { key: "by", label: "淘宝百亿补贴", icon: "🛒", src: "wire", q: "10005", hours: 24, max: 200 },
     { key: "tb", label: "淘宝实时线报", icon: "📦", src: "wire", q: "10003", hours: 24, max: 200 },
