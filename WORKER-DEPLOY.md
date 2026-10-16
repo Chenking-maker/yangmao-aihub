@@ -71,11 +71,18 @@ npx wrangler secret put YZ_PROMOTION_ID # 云瞻推广位 ID
 | HDK_TB_NAME | HDK_TB_NAME | 淘宝转链归因 |
 | JD_UNION_ID | JD_UNION_ID | 京东转链归因 |
 | LLM_API_KEY | LLM_API_KEY | AI 对话（硅基流动） |
-| YZ_APP_KEY | YZ_APP_KEY | 本地生活（美团等）转链 |
-| YZ_APP_SECRET | YZ_APP_SECRET | 同上 |
-| YZ_PROMOTION_ID | YZ_PROMOTION_ID | 云瞻推广位 ID |
+| YZ_APP_KEY | YZ_APP_KEY | 本地生活（美团等）转链（可选，未启用） |
+| YZ_APP_SECRET | YZ_APP_SECRET | 同上（可选，未启用） |
+| YZ_PROMOTION_ID | YZ_PROMOTION_ID | 云瞻推广位 ID（可选，未启用） |
+| SMTP_USER | SMTP_USER | 告警发件邮箱（370542303@qq.com） |
+| SMTP_PASS | SMTP_PASS | QQ 邮箱**授权码**（不是登录密码！mail.qq.com → 设置 → 账号 → 开 SMTP → 生成授权码） |
+| ALERT_MAIL_TO | ALERT_MAIL_TO | 告警收件邮箱 |
+| ALERT_TOKEN | ALERT_TOKEN | 手动测试告警通道的令牌（访问 /api/alert/test?token=xxx） |
 
-> 后 3 个（YZ_*）等云瞻平台的 app_key/app_secret/推广位ID 拿到后再配；不配也不影响其他功能，羊毛集合页会显示"即将上线"。
+> 后 3 个（YZ_*）等云瞻平台的 app_key/app_secret/推广位ID 拿到后再配；不配也不影响其他功能（本地生活走好单库美团）。
+>
+> 告警 4 件套（SMTP_USER / SMTP_PASS / ALERT_MAIL_TO / ALERT_TOKEN）：填上 QQ 授权码后，Worker 每 30 分钟自动体检一次，
+> 接口挂了会发邮件到 370542303@qq.com；配置好后访问 `https://yangmao-aihub.370542303.workers.dev/api/alert/test?token=woolalert-20261016` 能收到一封测试邮件。
 >
 > ⚠️ **每次 `wrangler deploy` 后密钥会被清空，必须重新按上面命令再传一遍**（本账号的怪毛病，面板端操作也会清）。
 
@@ -152,6 +159,7 @@ https://yangmao-aihub.<你的子域>.workers.dev/api/health
 | 京东链接转链降级为原始链接 | 个别京东链接偶发转不出通道，属正常降级；淘宝/淘口令转链不受影响 |
 | AI 对话不出商品卡 | `LLM_API_KEY` 没配或硅基流动 key 失效；health 里 `hasLLM:false` 就是这个原因 |
 | 改了代码怎么更新 | `cd worker && npx wrangler deploy`，**然后重传 8 个密钥**；或者直接 `git push`（自动构建会代劳，且不清密钥） |
+| **点「获取购买链接 / 领券购买 / 获取优惠链接」没反应或提示「网络开小差」** | ⚠️ 跨域预检（OPTIONS）失败。前端在 `github.io`，接口在 `workers.dev`，所有 POST 都先发 OPTIONS 预检；过去用 `json({}, 204)` 返回预检会抛异常（204 响应不允许带 body）→ 预检 500 → 浏览器拦下全部 POST。**本地同源不走预检所以看不出来**。正确写法是 `new Response(null, { status: 204, headers: { "access-control-allow-origin": "*", ... } })`，已修复 |
 
 ---
 
@@ -161,8 +169,8 @@ https://yangmao-aihub.<你的子域>.workers.dev/api/health
 worker/
 ├─ wrangler.toml      # 服务名/入口/公开变量（无密钥）
 ├─ src/index.js       # 路由：/api/search /api/wire /api/chat /api/convert ...
-├─ src/core.js        # 好单库 API 封装、转链、图片代理
-└─ src/yunzhan.js     # 云瞻 CPS（本地生活）转链：签名/业务列表/推广链接
+├─ src/core.js        # 好单库 API 封装、转链、图片代理、美团本地生活（活动列表+转链）
+└─ src/yunzhan.js     # 云瞻 CPS 转链（可选通道；云瞻 app_key 需实名+申请+可能收费，未启用，代码保留）
 
 （仓库根目录还有一个 wrangler.toml，是给 Git 推送自动构建用的，别删）
 ```

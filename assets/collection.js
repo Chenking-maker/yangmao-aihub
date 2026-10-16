@@ -25,19 +25,11 @@
       el.innerHTML =
         '<div class="coll-top"><span class="coll-pf">' + W.esc(a.platform || PLATFORMS[String(a.platform)] || "活动") + '</span>' +
         '<span class="coll-name">' + W.esc(a.name || "活动会场") + '</span></div>' +
-        '<div class="coll-desc">' + W.esc(a.period || "双11 全周期可参与") + '</div>' +
+        '<div class="coll-desc">' + W.esc(a.period || "双11 全周期可参与") +
+          (a.rebate ? ' <span class="rebate-dot">专属优惠</span>' : (a.needAuth ? ' <span class="rebate-dot soon">待开通</span>' : '')) + '</div>' +
         '<button class="coll-btn">进入领取 ›</button>';
       el.querySelector(".coll-btn").addEventListener("click", function () {
-        if (a.url) {
-          if (a.platform === "淘宝") {
-            W.toast("正在生成领取链接…");
-            apiPost("/api/redpacket", { activityId: a.activityId, activityUrl: a.url, title: a.name })
-              .then(function (r) { window.open((r && r.url) || a.url, "_blank", "noopener"); })
-              .catch(function () { window.open(a.url, "_blank", "noopener"); });
-          } else { window.open(a.url, "_blank", "noopener"); }
-        } else {
-          W.toast("打开「" + (a.name || "活动") + "」：进入对应 APP 搜索同名会场");
-        }
+        W.openActivity(a);
       });
       collGrid.appendChild(el);
     });

@@ -158,16 +158,7 @@
     for (var i = 0; i < state.activities.length; i++) if (state.activities[i].name.indexOf(kw) > -1) return state.activities[i];
     return null;
   }
-  function openRedpacket(a) {
-    if (!a) { toast("会场加载中，稍后再试"); return; }
-    if (!a.url) { toast("打开「" + a.name + "」：进入 " + a.platform + " APP 搜索同名会场"); return; }
-    if (a.platform === "淘宝") {
-      toast("正在生成红包链接…");
-      W.apiPost("/api/redpacket", { activityId: a.activityId, activityUrl: a.url, title: a.name })
-        .then(function (r) { window.open((r && r.url) || a.url, "_blank", "noopener"); })
-        .catch(function () { window.open(a.url, "_blank", "noopener"); });
-    } else { window.open(a.url, "_blank", "noopener"); }
-  }
+  function openRedpacket(a) { W.openActivity(a); }
   function renderActivities() {
     var grid = $("actGrid");
     var list = state.activities.length ? state.activities : window.ACTIVITIES.map(function (a) {
@@ -180,7 +171,8 @@
       el.className = "act-card" + (hot ? " hot" : "");
       el.innerHTML =
         '<div class="act-top"><span class="act-platform">' + W.esc(a.platform) + '</span><span class="act-name">' + W.esc(a.name) + '</span></div>' +
-        '<div class="act-time">' + W.esc(a.period || "") + '</div>' +
+        '<div class="act-time">' + W.esc(a.period || "") +
+          (a.rebate ? ' <span class="rebate-dot">专属优惠</span>' : (a.needAuth ? ' <span class="rebate-dot soon">待开通</span>' : '')) + '</div>' +
         '<button class="act-btn">进入会场 ›</button>';
       el.querySelector(".act-btn").addEventListener("click", function () {
         openRedpacket(state.activities.length ? findActivity(a.name) : a);

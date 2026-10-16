@@ -22,12 +22,13 @@
 
 import {
   normalizeList, hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
-  hdkActivityList, hdkConference,
+  hdkActivityList, hdkConference, relayActivity, verifyActivities,
   hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
-  hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity,
+  hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
   convertLink, proxyImage
 } from "./core.js";
 import { yzLifeBusinesses, yzPromotionLink } from "./yunzhan.js";
+import { sendAlert } from "./mailer.js";
 
 const CACHE_TTL = 600;
 const memCache = new Map();
@@ -220,9 +221,35 @@ function normalizeToolCalls(list) {
   return out;
 }
 
+/* ---------------- AI 分级用模 ----------------
+ * 简单检索（"抽纸"、"找找纸巾"）用免费小模型就够了；
+ * 复杂推理（凑单、比价、多轮比方案、优惠叠加）才切强模型 —— 既省钱又不掉体验。
+ */
+const SMART_HINTS = /凑单|凑满|比价|对比|哪个更|怎么买最|最划算|预算|算一下|帮我算|划算|方案|规划|攻略|清单|组合|搭配|一起买|优惠叠加|怎么叠|能省多少|推荐几|这几个|那再|再加|再来|还有没有|顺便|也要/;
+
+function pickModel(messages, env) {
+  const cheap = env.LLM_MODEL || "Qwen/Qwen2.5-7B-Instruct";
+  const smart = env.LLM_MODEL_SMART || "deepseek-ai/DeepSeek-V4.1-Flash";
+  if (!smart || smart === cheap) return cheap;
+
+  const users = messages.filter(m => m.role === "user");
+  const last = users.length ? users[users.length - 1] : null;
+  const text = (last && last.content) || "";
+
+  let score = 0;
+  if (text.length > 40) score += 1;            // 长描述 = 需求复杂
+  if (SMART_HINTS.test(text)) score += 2;      // 涉及算账/决策
+  if (users.length >= 2) score += 1;           // 多轮追问
+  if ((text.match(/[；;、]/g) || []).length >= 2) score += 1;  // 多个条件并列
+
+  return score >= 2 ? smart : cheap;
+}
+
 async function llmChat(env, messages) {
   const base = env.LLM_BASE_URL || "https://api.siliconflow.cn/v1";
   const chatMessages = [{ role: "system", content: SYSTEM_PROMPT }].concat(messages);
+  const model = pickModel(messages, env);
+  let nudge = 0;
   let products = [];
   let redpackets = [];
   let links = [];
@@ -235,7 +262,7 @@ async function llmChat(env, messages) {
         authorization: "Bearer " + env.LLM_API_KEY
       },
       body: JSON.stringify({
-        model: env.LLM_MODEL || "Qwen/Qwen2.5-7B-Instruct",
+        model: model,
         messages: chatMessages,
         tools: TOOLS,
         temperature: 0.5,
@@ -265,7 +292,17 @@ async function llmChat(env, messages) {
     if (!toolCalls.length) {
       // 兜底 2：个别情况下答案会落在 reasoning_content
       const reply = cleanReply((msg.content || "").trim() || (msg.reasoning_content || "").trim());
-      return { reply: reply || "这个我没接上，换个说法再试试？", products, redpackets, links };
+      // 兜底 3：免费小模型偶尔「只聊天不调工具」（凭空编商品/只说"我这就去搜"）——
+      //        在还没拿到任何结果时催一次，让它真的去调工具。
+      const promising = /稍等|稍后|马上|我这就|这就去|先去|我去搜|正在搜|等我/.test(reply);
+      const soundsLikeAnswer = /优惠券|券后|元|折|价|链接|推荐|搜|找|买/.test(reply);
+      if (nudge < 1 && !products.length && !redpackets.length && !links.length &&
+          (promising || (round === 0 && soundsLikeAnswer))) {
+        nudge++;
+        chatMessages.push({ role: "user", content: "别只说明或直接凭印象回答，先调用 search_goods 工具把真实商品查出来再回复我。" });
+        continue;
+      }
+      return { reply: reply || "这个我没接上，换个说法再试试？", products, redpackets, links, engine: model };
     }
 
     for (const call of toolCalls) {
@@ -280,10 +317,11 @@ async function llmChat(env, messages) {
         const acts = await hdkActivityList(env, 1, args.keyword || "");
         const hit = acts[0] || null;
         if (hit) {
-          const link = await hdkConference(env, {
+          const link = await relayActivity(env, {
             activityId: hit.activityId,
             activityUrl: hit.url,
-            title: hit.name
+            title: hit.name,
+            channel: hit.channel || ""
           });
           cards = [{
             id: hit.id,
@@ -293,7 +331,9 @@ async function llmChat(env, messages) {
             period: hit.period,
             url: link.url || hit.url,
             taoCode: link.taoCode || "",
-            shortUrl: link.shortUrl || ""
+            shortUrl: link.shortUrl || "",
+            rebate: !!link.rebate,
+            note: link.note || ""
           }];
           redpackets = redpackets.concat(cards);
         }
@@ -308,36 +348,160 @@ async function llmChat(env, messages) {
       chatMessages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(cards) });
     }
   }
-  return { reply: "这次没查到合适的，换个关键词再试试？", products, redpackets, links };
+  return { reply: "这次没查到合适的，换个关键词再试试？", products, redpackets, links, engine: model };
 }
 
 /* 本地生活业务列表：美团（好单库，免额外凭据）优先；云瞻仅在配置了凭据时作补充 */
 async function lifeBusinessList(env) {
   var out = [];
+  var seen = {};
+  var cand = [];   // { id, data }
   if (env.HDK_APIKEY) {
+    // ① 美团官方活动列表
     var d = await hdkMeituanActivities(env);
     if (d) {
       var now = Math.floor(Date.now() / 1000);
-      var seen = {};
       (d.red_activity || []).concat(d.time_activity || []).forEach(function (a) {
-        if (!a || !a.activity_id || seen[a.activity_id]) return;
-        if (a.end_time && Number(a.end_time) < now) return; // 已结束的活动不展示
-        seen[a.activity_id] = 1;
-        out.push(normalizeMeituanActivity(a));
+        if (!a || !a.activity_id) return;
+        if (a.end_time && Number(a.end_time) < now) return;   // 已结束的不展示
+        var k = "mt:" + a.activity_id;
+        if (seen[k]) return;
+        seen[k] = 1;
+        cand.push({ id: a.activity_id, item: normalizeMeituanActivity(a) });
       });
-      // 外卖 / 闪购类红包排前面
-      out.sort(function (x, y) {
-        var w = function (i) { return /外卖|闪购/.test(i.name) ? 0 : 1; };
-        return w(x) - w(y);
-      });
-      out = out.slice(0, 9);
     }
+    // ② 活动中心的本地生活会（外卖/闪购/吃喝玩乐/电影票…）
+    var acts = await hdkActivityList(env, 1, "").catch(function () { return []; });
+    (acts || []).forEach(function (a) {
+      if (a.channel !== "mt" || !a.activityId) return;
+      var k = "mt:" + a.activityId;
+      if (seen[k]) return;
+      seen[k] = 1;
+      cand.push({ id: a.activityId, item: normalizeLifeActivity(a) });
+    });
   }
+
+  // 并行校验链接可用性：取不到链接的活动直接不展示，避免用户点了报错
+  var probes = await Promise.all(cand.map(function (c) {
+    return hdkMeituanLink(env, c.id, 1).then(function (u) { return u ? c : null; })
+      .catch(function () { return null; });
+  }));
+  probes.forEach(function (c) { if (c) out.push(c.item); });
+
+  // 排序：外卖/吃喝玩乐/神券优先，闪购类最多 5 个 —— 避免整屏都是同一品牌的闪购专场
+  function score(i) {
+    var n = i.name || "";
+    if (/闪购/.test(n)) return 2;
+    if (/外卖|美食|吃喝|神券|红包|会员/.test(n)) return 0;
+    return 1;
+  }
+  out.sort(function (x, y) { return score(x) - score(y); });
+  var picked = [], mtCount = 0;
+  for (var i = 0; i < out.length && picked.length < 12; i++) {
+    if (/闪购/.test(out[i].name || "")) { if (mtCount >= 5) continue; mtCount++; }
+    picked.push(out[i]);
+  }
+  out = picked;
+
   if (out.length < 4 && env.YZ_APP_KEY && env.YZ_APP_SECRET) {
     var yz = await yzLifeBusinesses(env);
     (yz || []).forEach(function (b) { out.push(b); });
   }
   return out;
+}
+
+/* ---------------- 接口健康监控 ----------------
+ * 深度体检：把站点真正依赖的每条链路各探一次（真实调用，不是 ping）。
+ * 定时任务每 30 分钟跑一次（wrangler.toml [triggers]），异常发邮件；
+ * 状态存在 Cache API 里做去重 —— 刚挂立刻报，持续挂最多 2 小时提醒一次。
+ */
+const SITE_URL = "https://chenking-maker.github.io/yangmao-aihub/";
+
+async function probe(name, fn) {
+  const t0 = Date.now();
+  try {
+    const r = await fn();
+    return { name, ok: r === true, ms: Date.now() - t0, detail: typeof r === "string" ? r : "" };
+  } catch (e) {
+    return { name, ok: false, ms: Date.now() - t0, detail: String(e.message || e).slice(0, 220) };
+  }
+}
+
+async function deepHealth(env) {
+  const items = [];
+  items.push(await probe("好单库·商品搜索", async () => {
+    if (!env.HDK_APIKEY) return "未配置 HDK_APIKEY";
+    const l = await hdkSearch(env, "纸巾", 1);
+    if (!l.length) throw new Error("搜索返回 0 条");
+    return true;
+  }));
+  items.push(await probe("好单库·美团活动", async () => {
+    if (!env.HDK_APIKEY) return "未配置 HDK_APIKEY";
+    const d = await hdkMeituanActivities(env);
+    if (!d) throw new Error("活动列表返回空");
+    return true;
+  }));
+  items.push(await probe("活动会场列表", async () => {
+    if (!env.HDK_APIKEY) return "未配置 HDK_APIKEY";
+    const l = await hdkActivityList(env, 1, "");
+    if (!l.length) throw new Error("会场列表返回 0 条");
+    return true;
+  }));
+  items.push(await probe("AI 对话模型", async () => {
+    if (!env.LLM_API_KEY) return "未配置 LLM_API_KEY（前端走演示模式，不算故障）";
+    const res = await fetch((env.LLM_BASE_URL || "https://api.siliconflow.cn/v1") + "/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + env.LLM_API_KEY },
+      body: JSON.stringify({ model: env.LLM_MODEL || "Qwen/Qwen2.5-7B-Instruct", messages: [{ role: "user", content: "hi" }], max_tokens: 2 })
+    });
+    if (!res.ok) throw new Error("LLM " + res.status + " " + (await res.text()).slice(0, 140));
+    return true;
+  }));
+  items.push(await probe("静态站点（GitHub Pages）", async () => {
+    const res = await fetch(SITE_URL, { cf: { cacheTtl: 0 } });
+    if (!res.ok) throw new Error("站点 " + res.status);
+    return true;
+  }));
+  return { ts: Date.now(), items };
+}
+
+function reportText(rep, down) {
+  const lines = rep.items.map(i =>
+    (i.ok ? "  ✅ " : "  🔴 ") + i.name + "（" + i.ms + "ms）" + (i.detail ? " · " + i.detail : ""));
+  return "时间：" + new Date(rep.ts).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }) +
+    "\n异常项：" + (down.length ? down.map(d => d.name).join("、") : "无") +
+    "\n\n" + lines.join("\n") +
+    "\n\n后台：https://dash.cloudflare.com（Workers & Pages → yangmao-aihub → Logs）";
+}
+
+async function scheduledHealth(env) {
+  if (!env.ALERT_MAIL_TO) return { skipped: "未配置 ALERT_MAIL_TO，跳过告警" };
+  const rep = await deepHealth(env);
+  const down = rep.items.filter(i => !i.ok);
+
+  const cache = caches.default;
+  const ckey = new Request("https://health-cache.internal/state");
+  let prev = null;
+  const hit = await cache.match(ckey);
+  if (hit) { try { prev = await hit.json(); } catch (e) { /* ignore */ } }
+
+  const now = Date.now();
+  const prevDown = !!(prev && prev.down);
+  const lastMail = (prev && prev.lastMail) || 0;
+
+  if (!down.length) {
+    if (prevDown) await sendAlert(env, "✅ 羊毛AIHUB 接口已恢复", reportText(rep, down));
+    await cache.put(ckey, new Response(JSON.stringify({ down: false, ts: now, lastMail })));
+    return { ok: true, down: 0, mailed: prevDown };
+  }
+
+  if (!prevDown || now - lastMail > 2 * 3600 * 1000) {
+    const r = await sendAlert(env, "🔴 羊毛AIHUB 接口异常告警", reportText(rep, down));
+    await cache.put(ckey, new Response(JSON.stringify({ down: true, ts: now, lastMail: r.sent ? now : lastMail })));
+    return { ok: false, down: down.length, mailed: r.sent, reason: r.reason || "" };
+  }
+  await cache.put(ckey, new Response(JSON.stringify({ down: true, ts: now, lastMail })));
+  return { ok: false, down: down.length, mailed: false, note: "2 小时内已提醒过，静默中" };
 }
 
 export default {
@@ -362,10 +526,6 @@ export default {
     if (!rateLimit(ip)) return json({ error: "请求太频繁，歇一会儿再试" }, 429);
 
     try {
-      if (url.pathname === "/api/health") {
-        return json({ ok: true, hasKey: !!env.HDK_APIKEY, hasLLM: !!env.LLM_API_KEY, ts: Date.now() });
-      }
-
       if (url.pathname === "/api/search") {
         if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
         const q = url.searchParams.get("q") || "";
@@ -390,19 +550,23 @@ export default {
         const kw = url.searchParams.get("q") || "";
         const key = "a:" + kw;
         let data = cacheGet(key);
-        if (!data) { data = await hdkActivityList(env, 1, kw); cacheSet(key, data); }
+        if (!data) {
+          data = await hdkActivityList(env, 1, kw);
+          await verifyActivities(env, data, 20);
+          cacheSet(key, data);
+        }
         return json(data);
       }
 
       if (url.pathname === "/api/redpacket" && request.method === "POST") {
         if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
         const body = await request.json().catch(() => ({}));
-        const r = await hdkConference(env, {
+        const r = await relayActivity(env, {
           activityId: body.activityId || "",
           activityUrl: body.activityUrl || "",
-          title: body.title || "双11红包会场"
+          title: body.title || "双11红包会场",
+          channel: body.channel || ""
         });
-        if (!r.url) return json({ error: "该会场暂无可用链接" }, 404);
         return json(r);
       }
 
@@ -511,9 +675,32 @@ export default {
         return json({ url: yzLink });
       }
 
+      /* ---- 健康检查：?deep=1 时做全链路体检 ---- */
+      if (url.pathname === "/api/health") {
+        if (url.searchParams.get("deep") === "1") {
+          return json(await deepHealth(env));
+        }
+        return json({ ok: true, hasKey: !!env.HDK_APIKEY, hasLLM: !!env.LLM_API_KEY, ts: Date.now() });
+      }
+
+      /* ---- 告警通道测试：?token= 鉴权，成功会真的发一封邮件 ---- */
+      if (url.pathname === "/api/alert/test") {
+        if (!env.ALERT_TOKEN || url.searchParams.get("token") !== env.ALERT_TOKEN) {
+          return json({ error: "token 不对" }, 403);
+        }
+        const rep = await deepHealth(env);
+        const mail = await sendAlert(env, "🧪 羊毛AIHUB 告警通道测试", reportText(rep, rep.items.filter(i => !i.ok)));
+        return json({ health: rep, mail: mail });
+      }
+
       return json({ error: "not found" }, 404);
     } catch (err) {
       return json({ error: String(err && err.message || err) }, 500);
     }
+  },
+
+  /* 定时任务：每 30 分钟全链路体检，异常发邮件（见 wrangler.toml [triggers]） */
+  async scheduled(event, env, ctx) {
+    return await scheduledHealth(env);
   }
 };

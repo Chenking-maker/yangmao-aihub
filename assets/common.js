@@ -157,17 +157,57 @@
     }
     return null;
   }
+  /* ---- 跨域异步开窗：先同步占位窗口，避免被浏览器拦截 ---- */
+  function withPreWindow(run) {
+    var pre = null;
+    try { pre = window.open("about:blank", "_blank"); } catch (e) { pre = null; }
+    if (pre) {
+      try {
+        pre.document.write('<title>正在获取…</title><div style="font-family:-apple-system,\'PingFang SC\',sans-serif;padding:44px;text-align:center;color:#555;font-size:15px">正在获取你的专属优惠链接…</div>');
+      } catch (e) { /* 某些浏览器不允许写 about:blank */ }
+    }
+    function land(url) {
+      if (pre && !pre.closed) {
+        try { pre.opener = null; } catch (e) { /* ignore */ }
+        pre.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
+    }
+    function dismiss() { if (pre && !pre.closed) try { pre.close(); } catch (e) { /* ignore */ } }
+    run(land, dismiss);
+  }
+
   function openActivity(a) {
     if (!a) { toast("会场加载中，稍后再试"); return; }
-    if (!a.url) { toast("打开「" + a.name + "」：进入 " + a.platform + " APP 搜索同名会场"); return; }
-    if (a.platform === "淘宝") {
-      toast("正在生成红包链接…");
-      apiPost("/api/redpacket", { activityId: a.activityId, activityUrl: a.url, title: a.name })
-        .then(function (r) { window.open((r && r.url) || a.url, "_blank", "noopener"); })
-        .catch(function () { window.open(a.url, "_blank", "noopener"); });
-    } else {
-      window.open(a.url, "_blank", "noopener");
-    }
+    if (!a.activityId && !a.url) { toast("打开「" + a.name + "」：进入 " + a.platform + " APP 搜索同名会场"); return; }
+
+    withPreWindow(function (land, dismiss) {
+      apiPost("/api/redpacket", {
+        activityId: a.activityId, activityUrl: a.url, title: a.name, channel: a.channel || ""
+      }).then(function (r) {
+        if (r && r.needAuth) {
+          dismiss();
+          if (window.confirm("「" + a.name + "」的专属优惠授权还没开通。\n\n现在去开通吗？（免费，约 1 分钟）")) {
+            window.open(r.authUrl, "_blank");
+          }
+          return;
+        }
+        if (r && r.url) {
+          land(r.url);
+          toast(r.rebate ? "已生成你的专属优惠链接" : (r.note || "已为你打开活动页"));
+        } else if (a.url) {
+          land(a.url);
+          toast((r && r.note) || "已为你打开活动页");
+        } else {
+          dismiss();
+          toast((r && r.note) || "该会场暂时没有可用链接，换个会场看看");
+        }
+      }).catch(function () {
+        if (a.url) { land(a.url); toast("已为你打开活动页"); }
+        else { dismiss(); toast("网络开小差了，稍后再试"); }
+      });
+    });
   }
   function openTbRedpacket() {
     toast("正在打开淘宝超级红包…");

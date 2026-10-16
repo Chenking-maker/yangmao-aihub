@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1200px; height: 630px; overflow: hidden;
+    background:
+      radial-gradient(900px 420px at 78% -8%, rgba(217,56,50,.30), transparent 62%),
+      radial-gradient(700px 380px at 6% 104%, rgba(217,56,50,.16), transparent 60%),
+      #0b0b0d;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #f5f5f7; position: relative;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .wrap { position: relative; padding: 68px 72px; height: 100%; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 30px; }
+  .logo {
+    width: 54px; height: 54px; border-radius: 15px; background: #d93832;
+    display: grid; place-items: center; font-size: 26px; font-weight: 800; color: #fff;
+    box-shadow: 0 10px 26px rgba(217,56,50,.42);
+  }
+  .brand-name { font-size: 26px; font-weight: 800; letter-spacing: .5px; }
+  .brand-name small { display: block; font-size: 13px; font-weight: 500; color: #8b8b93; letter-spacing: 2.5px; margin-top: 3px; }
+  h1 { margin-top: 52px; font-size: 62px; line-height: 1.16; font-weight: 800; letter-spacing: -1.2px; }
+  h1 em { font-style: normal; color: #ff6a5e; }
+  .sub { margin-top: 22px; font-size: 23px; line-height: 1.6; color: #b9b9c2; max-width: 900px; }
+  .chips { margin-top: auto; display: flex; gap: 12px; flex-wrap: wrap; }
+  .chip {
+    padding: 11px 20px; border-radius: 999px; font-size: 17px; font-weight: 600;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.13); color: #e8e8ee;
+  }
+  .chip.hot { background: rgba(217,56,50,.16); border-color: rgba(217,56,50,.45); color: #ff8d82; }
+  .foot {
+    margin-top: 26px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 15px; color: #74747d; letter-spacing: .3px;
+  }
+  .ok { color: #58d68d; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">AI</div>
+      <div class="brand-name">羊毛AIHUB<small>省钱作业君 · AI 省钱助手</small></div>
+    </div>
+
+    <h1>搭上 AI 最智能的模型<br><em>让羊毛不再传统</em></h1>
+    <div class="sub">直接说想买啥，AI 自动把隐藏券找齐、红包领好、单凑到最划算。</div>
+
+    <div class="chips">
+      <span class="chip hot">AI 对话找券</span>
+      <span class="chip">双11 超级红包</span>
+      <span class="chip">美团外卖优惠</span>
+      <span class="chip">凑单一键算</span>
+      <span class="chip">实时线报广场</span>
+      <span class="chip hot">全站永久免费</span>
+    </div>
+
+    <div class="foot">
+      <span>chenking-maker.github.io/yangmao-aihub</span>
+      <span><span class="ok">●</span> 无需注册 · 打开就能用</span>
+    </div>
+  </div>
+</body>
+</html>

@@ -9,3 +9,9 @@ compatibility_date = "2026-10-01"
 [vars]
 LLM_BASE_URL = "https://api.siliconflow.cn/v1"
 LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+# AI 分级用模：复杂需求（凑单/比价/多轮规划）自动切到更强模型
+LLM_MODEL_SMART = "deepseek-ai/DeepSeek-V4.1-Flash"
+
+# 接口健康监控：每 30 分钟自检一次，异常发邮件告警
+[triggers]
+crons = ["*/30 * * * *"]

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chenking-maker.github.io/yangmao-aihub/sitemap.xml

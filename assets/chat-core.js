@@ -68,7 +68,7 @@
     function linkCardHtml(r) {
       var jd = r.platform === "京东";
       var status = r.converted
-        ? '<span class="badge-coupon">已转好</span>'
+        ? '<span class="badge-coupon">已获取</span>'
         : '<span class="wire-note">' + W.esc(r.note || "暂未转链") + '</span>';
       var couponLine = (Number(r.coupon) > 0) ? '<div class="wire-note">这张券 ' + r.coupon + ' 元，下单一起抵现</div>' : '';
       var actions = r.url

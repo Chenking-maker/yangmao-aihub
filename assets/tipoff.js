@@ -97,10 +97,10 @@
       btn.addEventListener("click", function () {
         var text = decodeURIComponent(btn.getAttribute("data-text"));
         btn.disabled = true;
-        btn.textContent = "转链中…";
+        btn.textContent = "获取中…";
         apiPost("/api/convert", { text: text }).then(function (r) {
           if (r && r.url) {
-            btn.textContent = "✓ 已转好 · 打开";
+            btn.textContent = "已获取 · 请打开";
             btn.disabled = false;
             btn.onclick = function () { window.open(r.url, "_blank", "noopener"); };
             if (r.taoCode) {
@@ -110,12 +110,12 @@
               copy.addEventListener("click", function () { W.copyText(r.taoCode, "淘口令已复制，打开淘宝自动识别"); });
               btn.parentNode.insertBefore(copy, btn.nextSibling);
             }
-            W.toast(r.note || "已转成你的优惠链接");
+            W.toast(r.note || "已获取你的专属优惠链接");
           } else if (r && r.note) {
             btn.textContent = "⚠ " + r.note;
             btn.disabled = false;
           } else {
-            btn.textContent = "转链失败，换一条试试";
+            btn.textContent = "获取失败，换一条试试";
             btn.disabled = false;
           }
         }).catch(function () {

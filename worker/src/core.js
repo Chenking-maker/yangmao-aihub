@@ -115,9 +115,28 @@ export async function hdkJdRelink(env, materialId, couponUrl) {
 
 /* ================= 活动 / 红包会场 ================= */
 
-var PLATFORM_NAMES = { "1": "淘宝", "2": "京东", "3": "拼多多", "4": "抖音", "5": "美团", "6": "快手" };
+/* 好单库活动中心 platform 码（实测自 /openapi/activity_list?cat_id=111）
+ * 1 淘宝 · 2 京东 · 3 拼多多 · 4 抖音 · 5 美团 · 6 美团(外卖/到店)
+ * 7 淘宝闪购 · 12 淘票票 · 15 淘宝(88VIP) · 16 淘宝(飞猪/度假) */
+var PLATFORM_NAMES = {
+  "1": "淘宝", "2": "京东", "3": "拼多多", "4": "抖音",
+  "5": "美团", "6": "美团", "7": "淘宝闪购", "12": "淘票票",
+  "15": "淘宝", "16": "淘宝"
+};
+
+/* 该会场能走哪条转链通道 —— 也就是「这笔有没有你的返利」 */
+export function relayChannel(a) {
+  var p = String((a && a.platform) || "");
+  var nm = String((a && a.activity_name) || "");
+  if (p === "1" || p === "7" || p === "12" || p === "15" || p === "16") return "tb";
+  if (p === "5" || p === "6") return "mt";
+  if (p === "2") return "jd";
+  if (/美团|外卖|闪购|吃喝玩乐|到店|团购/.test(nm)) return "mt";
+  return "";
+}
 
 export function normalizeActivity(a) {
+  var ch = relayChannel(a);
   return {
     id: String(a.id || ""),
     activityId: String(a.activity_id || ""),
@@ -128,7 +147,9 @@ export function normalizeActivity(a) {
     startTime: a.start_time || "",
     endTime: a.end_time || "",
     period: a.activity_date || "",
-    promotionType: Number(a.promotion_type || 0)
+    promotionType: Number(a.promotion_type || 0),
+    channel: ch,
+    rebate: !!ch
   };
 }
 
@@ -144,39 +165,115 @@ export async function hdkActivityList(env, page, keyword) {
   return list.map(normalizeActivity);
 }
 
-/**
- * 会场转链（红包/活动入口归因到推广位）
- * tb_name 生效时返回归因链接+淘口令+短链；否则降级原始 activity_url。
- * 返回 { url, taoCode, shortUrl, fallback }
- */
-export async function hdkConference(env, opts) {
-  opts = opts || {};
-  var title = String(opts.title || "双11红包会场");
-  if (title.length < 8) title = title + "会场入口领取";
+/* 淘宝会场转链：createConference_code 返回归因链接 + 淘口令 + 短链 */
+async function tbConference(env, activityId, activityUrl, title) {
+  if (!env.HDK_TB_NAME || !(activityId || activityUrl)) return null;
+  var body = new URLSearchParams({
+    apikey: env.HDK_APIKEY,
+    pid: env.HDK_PID || "",
+    tb_name: env.HDK_TB_NAME,
+    title: title
+  });
+  if (activityId) body.set("activity_id", String(activityId));
+  else body.set("activity_url", String(activityUrl));
+  try {
+    var res = await fetch("http://v2.api.haodanku.com/createConference_code", { method: "POST", body: body });
+    var j = await res.json();
+    if (j && (j.code === 1 || j.code === 200) && j.data && j.data.url) {
+      return { url: j.data.url, taoCode: j.data.tao_code || "", shortUrl: j.data.link || "" };
+    }
+  } catch (e) { /* 试下一条通道 */ }
+  return null;
+}
 
-  if (env.HDK_TB_NAME && (opts.activityId || opts.activityUrl)) {
-    var body = new URLSearchParams({
-      apikey: env.HDK_APIKEY,
-      pid: env.HDK_PID || "",
-      tb_name: env.HDK_TB_NAME,
-      title: title
+/* 京东会场转链：未开通京东官方授权时明确回传 needAuth，前端据此提示用户去开通 */
+async function jdConference(env, activityUrl, title) {
+  if (!activityUrl) return null;
+  var r = await hdkJdRelink(env, activityUrl);
+  if (r && r.url) return { url: r.url, shortUrl: r.shortUrl || "", taoCode: "" };
+  // 区分「没授权」和其他失败：探测一次授权状态
+  try {
+    var res = await fetch(HDK_BASE + "/unify_jditems_link", {
+      method: "POST",
+      body: new URLSearchParams({ apikey: env.HDK_APIKEY, material_id: String(activityUrl) })
     });
-    if (opts.activityId) body.set("activity_id", String(opts.activityId));
-    else body.set("activity_url", String(opts.activityUrl));
-    try {
-      var res = await fetch("http://v2.api.haodanku.com/createConference_code", { method: "POST", body: body });
-      var json = await res.json();
-      if (json && (json.code === 1 || json.code === 200) && json.data && json.data.url) {
-        return {
-          url: json.data.url,
-          taoCode: json.data.tao_code || "",
-          shortUrl: json.data.link || "",
-          fallback: false
-        };
-      }
-    } catch (e) { /* 落到兜底 */ }
+    var j = await res.json();
+    if (j && Number(j.code) === 500 && /未开通/.test(String(j.msg || ""))) {
+      return { needAuth: true, authUrl: "https://publish.haodanku.com/Promotioncenter/auth?platform=2" };
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+/**
+ * 会场转链总入口：把活动入口换成「带你返利标识」的推广链接。
+ * 通道优先级：淘宝 → 美团 → 京东；都失败时降级到原始活动页并明示「无返利」。
+ * 返回 { url, taoCode, shortUrl, channel, rebate, note, needAuth, authUrl }
+ */
+export async function relayActivity(env, opts) {
+  opts = opts || {};
+  var aid = String(opts.activityId || "");
+  var raw = String(opts.activityUrl || "");
+  var name = String(opts.title || "双11红包会场");
+  if (name.length < 8) name = name + "会场入口领取";
+
+  var order = ["tb", "mt", "jd"];
+  var ch = String(opts.channel || "");
+  if (ch === "mt") order = ["mt", "tb", "jd"];
+  else if (ch === "jd") order = ["jd", "tb", "mt"];
+
+  for (var i = 0; i < order.length; i++) {
+    var c = order[i];
+    var r = null;
+    if (c === "tb") r = await tbConference(env, aid, raw, name);
+    else if (c === "mt") {
+      var mu = aid ? await hdkMeituanLink(env, aid, 1) : "";
+      if (mu) r = { url: mu, taoCode: "", shortUrl: "" };
+    } else if (c === "jd") r = await jdConference(env, raw, name);
+
+    if (r && r.needAuth) {
+      return { url: "", channel: "jd", rebate: false, needAuth: true, authUrl: r.authUrl,
+        note: "京东返利还没开通授权，点下方按钮 1 分钟开通后即可拿返利" };
+    }
+    if (r && r.url) {
+      return { url: r.url, taoCode: r.taoCode || "", shortUrl: r.shortUrl || "", channel: c, rebate: true };
+    }
   }
-  return { url: opts.activityUrl || "", taoCode: "", shortUrl: "", fallback: true };
+
+  if (raw) return { url: raw, channel: "raw", rebate: false, note: "该会场暂未开通返利，已为你打开原活动页" };
+  return { url: "", channel: "", rebate: false, note: "该会场暂时没有可用链接，换个会场看看" };
+}
+
+/* 兼容旧调用名 */
+export const hdkConference = relayActivity;
+
+/**
+ * 批量核验会场「是否真能生成带你自己推广标识的链接」，据此决定卡片上的「专属优惠」标 ——
+ * 不能只看平台码猜（例如淘票票/淘宝闪购虽然平台码属阿里系，但活动物料不可转链）。
+ * 并发 5 路探测，结果随 /api/activities 一起缓存。
+ */
+export async function verifyActivities(env, list, limit) {
+  var items = (list || []).slice(0, limit || 20);
+  var i = 0;
+  async function run() {
+    while (i < items.length) {
+      var a = items[i++];
+      if (!a.channel) { a.rebate = false; continue; }
+      try {
+        if (a.channel === "tb") {
+          a.rebate = !!(await tbConference(env, a.activityId, a.url, (a.name || "活动") + "会场入口领取"));
+        } else if (a.channel === "mt") {
+          a.rebate = !!(a.activityId && (await hdkMeituanLink(env, a.activityId, 1)));
+        } else if (a.channel === "jd") {
+          var r = await jdConference(env, a.url, a.name);
+          a.rebate = !!(r && r.url);
+          a.needAuth = !!(r && r.needAuth);
+        }
+      } catch (e) { a.rebate = false; }
+    }
+  }
+  await Promise.all([run(), run(), run(), run(), run()]);
+  return list;
 }
 
 /* ================= 本地生活（美团 CPS，走好单库，免费）=================
@@ -224,6 +321,26 @@ export function normalizeMeituanActivity(a) {
     image: a.activity_image || "",
     desc: a.activity_desc_private || "领券下单更划算",
     src: "meituan"
+  };
+}
+
+/* 活动中心的本地生活会（/openapi/activity_list?cat_id=111）→ 统一卡片结构 */
+export function normalizeLifeActivity(a) {
+  var nm = a.name || "本地生活优惠";
+  var cat, icon;
+  if (/闪购/.test(nm)) { cat = "美团闪购"; icon = "🛒"; }
+  else if (/外卖|美食|吃|餐饮/.test(nm)) { cat = "外卖红包"; icon = "🍜"; }
+  else if (/电影|影票|票/.test(nm)) { cat = "电影票"; icon = "🎬"; }
+  else if (/酒店|旅行|度假|门票/.test(nm)) { cat = "出行旅行"; icon = "🏨"; }
+  else { cat = "到店优惠"; icon = "🎫"; }
+  return {
+    id: "mt:" + (a.activityId || ""),
+    name: nm,
+    cat: cat,
+    icon: icon,
+    image: a.pic || "",
+    desc: "点「获取优惠链接」生成你的专属链接，领券下单更划算",
+    src: "activity"
   };
 }
 

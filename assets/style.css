@@ -693,6 +693,19 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
 .wire-btn.ghost { background: transparent; border: 1px solid var(--hairline-2); color: var(--text-2); }
 .wire-btn.ghost:hover { color: var(--text); border-color: var(--text-3); }
 .wire-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+/* 「专属优惠」小标 —— 表示该入口能生成带推广标识的链接 */
+.rebate-dot {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 10.5px; line-height: 16px; font-weight: 600; letter-spacing: 0.2px;
+  color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 26%, transparent);
+  vertical-align: middle; white-space: nowrap;
+}
+.rebate-dot.soon {
+  color: var(--text-3);
+  background: var(--surface-3);
+  border-color: var(--hairline-2);
+}
 /* 骨架屏 */
 .wire-sk {
   background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-md);
@@ -1484,3 +1497,16 @@ body.has-page-side.ps-closed .side-toggle:hover { left: 0; }
 .skill-cmd.sm { display: inline-block; font-size: 15px; padding: 8px 16px; margin: 4px 0 6px; }
 .sk-alt { font-size: 12.5px; }
 .sk-alt code { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); word-break: break-all; }
+
+/* ---- 热门省钱搜索（长尾词入口） ---- */
+.hotsearch { margin: 44px 0 0; padding: 26px 28px; border: 1px solid var(--hairline); border-radius: var(--r-lg); background: var(--surface-2); }
+.hotsearch h2 { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+.hs-sub { font-size: 13px; color: var(--text-3); margin: 0 0 16px; }
+.hs-tags { display: flex; flex-wrap: wrap; gap: 9px; }
+.hs-tags a {
+  display: inline-flex; align-items: center; padding: 8px 15px; border-radius: 999px;
+  font-size: 13px; font-weight: 500; color: var(--text-2);
+  background: var(--surface-3); border: 1px solid var(--hairline);
+  transition: color .15s, border-color .15s, background .15s;
+}
+.hs-tags a:hover { color: var(--red); border-color: var(--red); background: transparent; }

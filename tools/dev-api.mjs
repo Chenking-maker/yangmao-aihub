@@ -12,9 +12,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
-  hdkActivityList, hdkConference,
+  hdkActivityList, hdkConference, relayActivity,
   hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
-  hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity,
+  hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
   convertLink, proxyImage
 } from "../worker/src/core.js";
 import { yzLifeBusinesses, yzPromotionLink } from "../worker/src/yunzhan.js";
@@ -270,10 +270,11 @@ async function llmChat(messages) {
         const acts = await hdkActivityList(env, 1, args.keyword || "");
         const hit = acts[0] || null;
         if (hit) {
-          const link = await hdkConference(env, {
+          const link = await relayActivity(env, {
             activityId: hit.activityId,
             activityUrl: hit.url,
-            title: hit.name
+            title: hit.name,
+            channel: hit.channel || ""
           });
           cards = [{
             id: hit.id,
@@ -283,7 +284,9 @@ async function llmChat(messages) {
             period: hit.period,
             url: link.url || hit.url,
             taoCode: link.taoCode || "",
-            shortUrl: link.shortUrl || ""
+            shortUrl: link.shortUrl || "",
+            rebate: !!link.rebate,
+            note: link.note || ""
           }];
           redpackets = redpackets.concat(cards);
         }
@@ -315,6 +318,45 @@ const server = createServer(async (req, res) => {
   }
 
   try {
+    if (url.pathname === "/api/health" && url.searchParams.get("deep") === "1") {
+      const probe = async (name, fn) => {
+        const t0 = Date.now();
+        try { const r = await fn(); return { name, ok: r === true, ms: Date.now() - t0, detail: typeof r === "string" ? r : "" }; }
+        catch (e) { return { name, ok: false, ms: Date.now() - t0, detail: String(e.message || e).slice(0, 220) }; }
+      };
+      const items = [
+        await probe("好单库·商品搜索", async () => {
+          if (!env.HDK_APIKEY) return "未配置 HDK_APIKEY";
+          const l = await hdkSearch(env, "纸巾", 1);
+          if (!l.length) throw new Error("搜索返回 0 条");
+          return true;
+        }),
+        await probe("好单库·美团活动", async () => {
+          if (!env.HDK_APIKEY) return "未配置 HDK_APIKEY";
+          const d = await hdkMeituanActivities(env);
+          if (!d) throw new Error("活动列表返回空");
+          return true;
+        }),
+        await probe("活动会场列表", async () => {
+          if (!env.HDK_APIKEY) return "未配置 HDK_APIKEY";
+          const l = await hdkActivityList(env, 1, "");
+          if (!l.length) throw new Error("会场列表返回 0 条");
+          return true;
+        }),
+        await probe("AI 对话模型", async () => {
+          if (!env.LLM_API_KEY) return "未配置 LLM_API_KEY";
+          const r = await fetch((env.LLM_BASE_URL || "https://api.siliconflow.cn/v1") + "/chat/completions", {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: "Bearer " + env.LLM_API_KEY },
+            body: JSON.stringify({ model: env.LLM_MODEL || "Qwen/Qwen2.5-7B-Instruct", messages: [{ role: "user", content: "hi" }], max_tokens: 2 })
+          });
+          if (!r.ok) throw new Error("LLM " + r.status);
+          return true;
+        })
+      ];
+      return json(res, { ts: Date.now(), items });
+    }
+
     if (url.pathname === "/api/health") {
       return json(res, { ok: true, hasKey: !!env.HDK_APIKEY, hasLLM: !!env.LLM_API_KEY });
     }
@@ -347,12 +389,12 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/api/redpacket" && req.method === "POST") {
       if (!env.HDK_APIKEY) return json(res, { error: "未配置 HDK_APIKEY" }, 503);
       const body = await readBody(req);
-      const r = await hdkConference(env, {
+      const r = await relayActivity(env, {
         activityId: body.activityId || "",
         activityUrl: body.activityUrl || "",
-        title: body.title || "双11红包会场"
+        title: body.title || "双11红包会场",
+        channel: body.channel || ""
       });
-      if (!r.url) return json(res, { error: "该会场暂无可用链接" }, 404);
       return json(res, r);
     }
 
@@ -440,22 +482,47 @@ const server = createServer(async (req, res) => {
     if (url.pathname === "/api/life/business") {
       let items = cacheGet("life:biz2");
       if (!items) {
-        items = [];
+        const out = [];
+        const seen = {};
+        const cand = [];
         if (env.HDK_APIKEY) {
           const d = await hdkMeituanActivities(env);
           if (d) {
             const now = Math.floor(Date.now() / 1000);
-            const seen = {};
             ((d.red_activity || []).concat(d.time_activity || [])).forEach((a) => {
-              if (!a || !a.activity_id || seen[a.activity_id]) return;
+              if (!a || !a.activity_id) return;
               if (a.end_time && Number(a.end_time) < now) return;
-              seen[a.activity_id] = 1;
-              items.push(normalizeMeituanActivity(a));
+              const k = "mt:" + a.activity_id;
+              if (seen[k]) return;
+              seen[k] = 1;
+              cand.push({ id: a.activity_id, item: normalizeMeituanActivity(a) });
             });
-            items.sort((x, y) => (/外卖|闪购/.test(x.name) ? 0 : 1) - (/外卖|闪购/.test(y.name) ? 0 : 1));
-            items = items.slice(0, 9);
           }
+          const acts = await hdkActivityList(env, 1, "").catch(() => []);
+          (acts || []).forEach((a) => {
+            if (a.channel !== "mt" || !a.activityId) return;
+            const k = "mt:" + a.activityId;
+            if (seen[k]) return;
+            seen[k] = 1;
+            cand.push({ id: a.activityId, item: normalizeLifeActivity(a) });
+          });
         }
+        const probes = await Promise.all(cand.map((c) =>
+          hdkMeituanLink(env, c.id, 1).then((u) => (u ? c : null)).catch(() => null)));
+        probes.forEach((c) => { if (c) out.push(c.item); });
+        const score = (i) => {
+          const n = i.name || "";
+          if (/闪购/.test(n)) return 2;
+          if (/外卖|美食|吃喝|神券|红包|会员/.test(n)) return 0;
+          return 1;
+        };
+        out.sort((x, y) => score(x) - score(y));
+        const picked = []; let mtCount = 0;
+        for (let i = 0; i < out.length && picked.length < 12; i++) {
+          if (/闪购/.test(out[i].name || "")) { if (mtCount >= 5) continue; mtCount++; }
+          picked.push(out[i]);
+        }
+        items = picked;
         if (items.length < 4 && env.YZ_APP_KEY && env.YZ_APP_SECRET) {
           const yz = await yzLifeBusinesses(env);
           (yz || []).forEach((b) => items.push(b));
