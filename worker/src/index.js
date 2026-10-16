@@ -576,11 +576,28 @@ export default {
       if (url.pathname === "/api/activities") {
         if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
         const kw = url.searchParams.get("q") || "";
-        const data = await swr(ctx, "a:" + kw, async () => {
-          const list = await hdkActivityList(env, 1, kw);
-          await verifyActivities(env, list, 12);   // 只核验前 9 条（展示的主力），其余不打标也不误标
-          return list;
-        });
+        const key = "a:" + kw;
+        const hit = memCache.get(key);
+        if (hit) {
+          const age = (Date.now() - hit.t) / 1000;
+          if (age < CACHE_TTL) return json(hit.data);
+          if (age < HEAVY_STALE && ctx && ctx.waitUntil) {
+            // 过期但可用：先返回旧数据，后台重新核验
+            ctx.waitUntil(Promise.resolve().then(async () => {
+              const fresh = await hdkActivityList(env, 1, kw);
+              await verifyActivities(env, fresh, 12);
+              memCache.set(key, { data: fresh, t: Date.now() });
+            }).catch(() => { /* 刷新失败继续用旧的 */ }));
+            return json(hit.data);
+          }
+        }
+        // 冷启动：列表先秒回（不打返利标），后台核验完写入缓存，后续访客就能看到标
+        const data = await hdkActivityList(env, 1, kw);
+        data.forEach(a => { a.rebate = false; delete a.needAuth; });
+        const done = verifyActivities(env, data, 12)
+          .then(() => { memCache.set(key, { data, t: Date.now() }); })
+          .catch(() => { /* 核验失败下次再试 */ });
+        if (ctx && ctx.waitUntil) ctx.waitUntil(done); else await done;
         return json(data);
       }
 
