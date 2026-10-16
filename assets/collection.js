@@ -73,7 +73,10 @@
     }
   }
 
-  apiGet("/api/life/business").then(function (r) {
+  function slow(p, ms) {
+    return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error("slow")); }, ms || 15000); })]);
+  }
+  slow(apiGet("/api/life/business")).then(function (r) {
     if (!r || !r.configured || !r.items || !r.items.length) { lifeFallback(); return; }
     if (lifeSec) {
       var tag = lifeSec.querySelector(".tag");

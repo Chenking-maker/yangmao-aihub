@@ -378,6 +378,7 @@ async function lifeBusinessList(env) {
   var out = [];
   var seen = {};
   var cand = [];   // { id, data }
+  var BAD_NAME = /隐藏券查询|投流|测试|demo/i;   // 非优惠类/内部活动不展示
   if (env.HDK_APIKEY) {
     // ① 美团官方活动列表
     var d = await hdkMeituanActivities(env);
@@ -386,6 +387,7 @@ async function lifeBusinessList(env) {
       (d.red_activity || []).concat(d.time_activity || []).forEach(function (a) {
         if (!a || !a.activity_id) return;
         if (a.end_time && Number(a.end_time) < now) return;   // 已结束的不展示
+        if (BAD_NAME.test(a.activity_name || "")) return;
         var k = "mt:" + a.activity_id;
         if (seen[k]) return;
         seen[k] = 1;
@@ -396,6 +398,7 @@ async function lifeBusinessList(env) {
     var acts = await hdkActivityList(env, 1, "").catch(function () { return []; });
     (acts || []).forEach(function (a) {
       if (a.channel !== "mt" || !a.activityId) return;
+      if (BAD_NAME.test(a.name || "")) return;
       var k = "mt:" + a.activityId;
       if (seen[k]) return;
       seen[k] = 1;
@@ -403,13 +406,15 @@ async function lifeBusinessList(env) {
     });
   }
 
-  // 限并发 + 超时校验：取不到链接的活动直接不展示，避免用户点了报错
-  await pool(cand.slice(0, 10), 5, async function (c) {
+  // 限并发 + 超时校验：只阻塞核验前 6 条（首屏体验优先），其余直接展示、
+  // 取不到链接时前端有兜底提示；SWR 后台刷新会逐步把失效项挤掉
+  await pool(cand.slice(0, 6), 5, async function (c) {
     try {
       const u = await withTimeout(hdkMeituanLink(env, c.id, 1), 5000, "life转链");
       if (u) out.push(c.item);
     } catch (e) { /* 超时/失败都跳过 */ }
   });
+  cand.slice(6).forEach(function (c) { out.push(c.item); });
 
   // 排序：外卖/吃喝玩乐/神券优先，闪购类最多 5 个 —— 避免整屏都是同一品牌的闪购专场
   function score(i) {
