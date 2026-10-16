@@ -16,6 +16,19 @@
 
   /* ---- 红包 / 会场 ---- */
   var collGrid = $("collGrid");
+  function actStarItem(a) {
+    return {
+      k: "a:" + (a.activityId || a.id || a.name),
+      type: "activity",
+      title: a.name || "活动会场",
+      platform: a.platform || "",
+      activityId: a.activityId || "",
+      url: a.url || "",
+      direct: a.direct || "",
+      channel: a.channel || "",
+      save: 0
+    };
+  }
   function renderActivities(list) {
     collGrid.innerHTML = "";
     (list || []).forEach(function (a) {
@@ -28,6 +41,7 @@
         '<div class="coll-desc">' + W.esc(a.period || "双11 全周期可参与") +
           (a.rebate ? ' <span class="rebate-dot">专属优惠</span>' : (a.needAuth ? ' <span class="rebate-dot soon">待开通</span>' : '')) + '</div>' +
         '<button class="coll-btn">进入领取 ›</button>';
+      el.querySelector(".coll-top").appendChild(W.starBtn(actStarItem(a)));
       el.querySelector(".coll-btn").addEventListener("click", function () {
         W.openActivity(a);
       });
@@ -98,6 +112,9 @@
         '<span class="status-badge on">可领</span></div>' +
         '<div class="life-desc">' + W.esc(b.desc || "点击生成专属优惠链接，领券下单更划算") + '</div>' +
         '<button class="life-btn on">获取优惠链接 ›</button>';
+      el.querySelector(".life-top").appendChild(W.starBtn({
+        k: "l:" + b.id, type: "life", title: b.name, cat: b.cat, lifeId: b.id, pic: b.image || "", save: 0
+      }));
       el.querySelector(".life-btn").addEventListener("click", function () {
         var btn = el.querySelector(".life-btn");
         btn.disabled = true;

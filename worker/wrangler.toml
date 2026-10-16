@@ -24,7 +24,10 @@ SMTP_USER = "370542303@qq.com"
 SMTP_FROM = "370542303@qq.com"
 ALERT_MAIL_TO = "370542303@qq.com"
 ALERT_TOKEN = "woolalert-20261016"
+# 省钱日报的微信推送通道（PushPlus 的 PUSH_TOKEN / 企业微信机器人 WECOM_WEBHOOK）
 
-# 每 30 分钟全链路自检一次，异常发邮件到 ALERT_MAIL_TO
+# 定时任务：
+#  ① 每天 08:00（北京时间）= 生成「省钱日报」并推送微信
+#  ② 每 30 分钟 = 全链路体检（异常发邮件）+ 重接口缓存预热
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["0 0 * * *", "*/30 * * * *"]

@@ -124,6 +124,20 @@ var PLATFORM_NAMES = {
   "15": "淘宝", "16": "淘宝"
 };
 
+/* 没有可转链物料、也没有原始 url 时，给个能点得动的官方入口兜底 ——
+ * 有 url 的一律优先用 url，这里是最后的「直达会场」保证。 */
+var PLATFORM_HOME = {
+  "1": "https://m.tb.cn/.TBD11",
+  "2": "https://pro.m.jd.com/mall/active/4Gks5dMzJmvvP3Dt7T9mF7pjt3fV/index.html",
+  "4": "https://www.douyin.com/",
+  "5": "https://i.meituan.com/",
+  "6": "https://i.meituan.com/",
+  "7": "https://main.m.taobao.com/",
+  "12": "https://www.taopiaopiao.com/",
+  "15": "https://vip.taobao.com/",
+  "16": "https://www.fliggy.com/"
+};
+
 /* 该会场能走哪条转链通道 —— 也就是「这笔有没有你的返利」 */
 export function relayChannel(a) {
   var p = String((a && a.platform) || "");
@@ -137,12 +151,15 @@ export function relayChannel(a) {
 
 export function normalizeActivity(a) {
   var ch = relayChannel(a);
+  var raw = a.activity_url || "";
   return {
     id: String(a.id || ""),
     activityId: String(a.activity_id || ""),
     name: a.activity_name || "",
     platform: PLATFORM_NAMES[String(a.platform)] || "活动",
-    url: a.activity_url || "",
+    url: raw,
+    /* 直达入口：原始活动页优先，其次按平台兜底，保证「进入会场」永远点得动 */
+    direct: raw || PLATFORM_HOME[String(a.platform)] || "",
     pic: a.activity_pic || "",
     startTime: a.start_time || "",
     endTime: a.end_time || "",
@@ -209,9 +226,39 @@ async function jdConference(env, activityUrl, title) {
   return null;
 }
 
+/* ---- 会场/红包「固定链接」缓存 ----
+ * 会场入口转链一次就够了：同一个活动在整个活动周期用的是同一条推广链接，
+ * 没必要每次点击都重新转 —— 直接复用（12 小时），既快又省上游调用。
+ * 实时性强的（实时线报、商品、好价榜）一律保持实时转链，绝不走这里。 */
+var CONF_TTL = 43200;
+var _confMem = new Map();   // 无 Cache API 的环境（本地 dev-api）用内存兜底，行为保持一致
+function confReq(k) { return new Request("https://wool-cache.internal/conf/" + encodeURIComponent(k)); }
+async function confMatch(k) {
+  var m = _confMem.get(k);
+  if (m && m.exp > Date.now()) return m.v;
+  if (m) _confMem.delete(k);
+  try {
+    if (typeof caches === "undefined") return null;
+    var r = await caches.default.match(confReq(k));
+    if (!r) return null;
+    var j = await r.json();
+    return j && j.url ? j : null;
+  } catch (e) { return null; }
+}
+async function confPut(k, v) {
+  _confMem.set(k, { v: v, exp: Date.now() + CONF_TTL * 1000 });
+  try {
+    if (typeof caches === "undefined") return;
+    await caches.default.put(confReq(k), new Response(JSON.stringify(v), {
+      headers: { "cache-control": "public, max-age=" + CONF_TTL }
+    }));
+  } catch (e) { /* 写缓存失败不影响主流程 */ }
+}
+
 /**
  * 会场转链总入口：把活动入口换成「带你返利标识」的推广链接。
- * 通道优先级：淘宝 → 美团 → 京东；都失败时降级到原始活动页并明示「无返利」。
+ * 通道优先级：淘宝 → 美团 → 京东；都失败时降级到原始活动页/官方入口（保证点得动）。
+ * 转链成功的结果按 活动ID/URL 固定缓存，下次直接复用（opts.fresh = true 可强制重转）。
  * 返回 { url, taoCode, shortUrl, channel, rebate, note, needAuth, authUrl }
  */
 export async function relayActivity(env, opts) {
@@ -220,6 +267,12 @@ export async function relayActivity(env, opts) {
   var raw = String(opts.activityUrl || "");
   var name = String(opts.title || "双11红包会场");
   if (name.length < 8) name = name + "会场入口领取";
+
+  var ck = aid || raw || name;
+  if (opts.fresh !== true) {
+    var cached = await confMatch(ck);
+    if (cached) { cached.cached = true; return cached; }
+  }
 
   var order = ["tb", "mt", "jd"];
   var ch = String(opts.channel || "");
@@ -237,14 +290,20 @@ export async function relayActivity(env, opts) {
 
     if (r && r.needAuth) {
       return { url: "", channel: "jd", rebate: false, needAuth: true, authUrl: r.authUrl,
-        note: "京东返利还没开通授权，点下方按钮 1 分钟开通后即可拿返利" };
+        note: "京东专属优惠还差一步授权：在好单库后台「个人中心 → 授权管理 → 京东联盟账号授权」填入 联盟ID + 授权key 即可" };
     }
     if (r && r.url) {
-      return { url: r.url, taoCode: r.taoCode || "", shortUrl: r.shortUrl || "", channel: c, rebate: true };
+      var out = { url: r.url, taoCode: r.taoCode || "", shortUrl: r.shortUrl || "", channel: c, rebate: true };
+      await confPut(ck, out);   // 固定链接：转一次，之后一直复用
+      return out;
     }
   }
 
-  if (raw) return { url: raw, channel: "raw", rebate: false, note: "该会场暂未开通返利，已为你打开原活动页" };
+  /* 最后兜底：没有任何返利通道时，也要保证「进入会场」点得动（直达原活动页/官方入口） */
+  var direct = String(opts.direct || raw || "");
+  if (direct) {
+    return { url: direct, channel: "direct", rebate: false, note: "已为你打开活动会场（这个会场暂无专属优惠通道）" };
+  }
   return { url: "", channel: "", rebate: false, note: "该会场暂时没有可用链接，换个会场看看" };
 }
 
@@ -420,6 +479,69 @@ export async function hdkWireReport(type, page) {
   };
 }
 
+/* 好单库线报时间格式 "2026-10-16 11:43:25"（北京时间，无时区后缀）→ 毫秒时间戳。
+ * 必须按 +08:00 解析，否则 Worker 的 UTC 环境会整体错 8 小时，24 小时窗口就废了。 */
+export function parseWireTime(s) {
+  var m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return 0;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 8, +m[5], +m[6]);
+}
+
+/**
+ * 24 小时滚动线报：分批翻页（每页 20 条），按 starttime 过滤出最近 N 小时的全部条目。
+ * 24 小时前的自动不再出现 —— 用户要的是「当天总量」而不是固定的 10 条。
+ * 翻页是自适应的：某一批全部早于窗口就立刻收手，不会白拉后面的。
+ * 返回 { items, total, shown, hours, since, until, pages }
+ */
+export async function hdkWireReportRecent(type, hours) {
+  hours = hours || 24;
+  var cutoff = Date.now() - hours * 3600 * 1000;
+  var MAXP = 20, BATCH = 4;
+  var row = [];     // { it, t }
+  var total = 0;
+
+  for (var start = 1; start <= MAXP; start += BATCH) {
+    var nums = [];
+    for (var i = start; i < start + BATCH && i <= MAXP; i++) nums.push(i);
+    var res = [];
+    await pool(nums, BATCH, async function (p) {
+      try { res.push(await hdkWireReport(type, p)); } catch (e) { /* 单页失败跳过 */ }
+    });
+    if (!res.length) break;
+    if (start === 1) total = res[0].total || 0;
+
+    var batchAllOld = true;
+    res.forEach(function (r) {
+      (r.items || []).forEach(function (it) {
+        var t = parseWireTime(it.time);
+        row.push({ it: it, t: t });
+        if (!t || t >= cutoff) batchAllOld = false;   // 时间缺失的当新数据留着
+      });
+    });
+    if (batchAllOld) break;   // 这一整批都早于窗口 → 后面只会更早，收手
+  }
+
+  var seen = {};
+  var items = [];
+  row.forEach(function (x) {
+    if (x.t && x.t < cutoff) return;
+    if (seen[x.it.id]) return;
+    seen[x.it.id] = 1;
+    x.it.ts = x.t;
+    items.push(x.it);
+  });
+  items.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+
+  return {
+    items: items,
+    total: total,
+    shown: items.length,
+    hours: hours,
+    since: cutoff,
+    until: Date.now()
+  };
+}
+
 /* ================= 素材线报（宠物/美妆） ================= */
 
 /* 素材标签：爆款/宠物/母婴/美妆/线报 */
@@ -463,6 +585,84 @@ export async function hdkMaterialItems(communityId, page) {
       time: it.create_at || 0
     };
   });
+}
+
+/* ================= 省钱日报 =================
+ * 口径说明：站点是纯静态 + 无账号，没法拿到真实订单，所以「省了多少」有两层：
+ *  ① 全站层（服务端）：当前在架的带货优惠一共能省多少、最狠的单品是哪几个 —— 每天定时算一次；
+ *  ② 个人层（前端 localStorage 埋点）：你点开过的优惠累计能省多少 —— 隐私留在本机，不上传。
+ * 两层在「省钱日报」页合并展示。
+ */
+
+/* 北京时间日期串：2026-10-16 */
+export function bjDate(ts) {
+  var d = new Date((ts || Date.now()) + 8 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+export async function dailyStats(env) {
+  if (!env.HDK_APIKEY) return null;
+  var feeds = await Promise.all([1, 2, 4, 6].map(function (t) {
+    return hdkFeed(env, t, 50).catch(function () { return []; });
+  }));
+
+  var seen = {}, all = [];
+  feeds.forEach(function (l) {
+    (l || []).forEach(function (p) {
+      if (!p || !p.id || seen[p.id]) return;
+      seen[p.id] = 1; all.push(p);
+    });
+  });
+
+  /* 脏数据过滤：秒杀类商品的「原价」常是占位值（10009 之类），会把省钱额算成天文数字 */
+  var valid = all.filter(function (p) {
+    var base = Number(p.price) || 0;
+    return base > 0 && base < 5000 && Number(p.endPrice) > 0;
+  });
+
+  var withCoupon = valid.filter(function (p) { return Number(p.coupon) > 0; });
+  var saveTotal = 0, saveToday = 0, sumPrice = 0;
+  withCoupon.forEach(function (p) { saveTotal += Number(p.coupon) || 0; });
+  valid.forEach(function (p) {
+    var base = Number(p.price) || 0;
+    var s = base - (Number(p.endPrice) || 0);
+    if (s > 0) saveToday += s;
+    sumPrice += base;
+  });
+
+  var top = all
+    .map(function (p) {
+      var off = (Number(p.price) || 0) - (Number(p.endPrice) || 0);
+      return { id: p.id, title: p.title, price: p.price, endPrice: p.endPrice, coupon: Number(p.coupon) || 0, off: Math.round(off * 10) / 10, pic: p.pic };
+    })
+    /* 剔除脏数据：秒杀类商品的「原价」常是占位值（如 10009），会被算成省 9997 元，必须挡掉 */
+    .filter(function (p) {
+      var base = Number(p.price) || 0;
+      return p.off > 0 && base > 0 && base < 5000 && p.off / base < 0.95 && Number(p.endPrice) > 0;
+    })
+    .sort(function (a, b) { return b.off - a.off; })
+    .slice(0, 5);
+
+  var wire = null;
+  try { wire = await hdkWireReportRecent(0, 24); } catch (e) { wire = null; }
+
+  var acts = [];
+  try { acts = await hdkActivityList(env, 1, ""); } catch (e) { acts = []; }
+  var rebateActs = acts.filter(function (a) { return a.channel; });
+
+  return {
+    date: bjDate(Date.now()),
+    generatedAt: Date.now(),
+    deals: all.length,
+    couponDeals: withCoupon.length,
+    couponSave: Math.round(saveTotal),
+    instantSave: Math.round(saveToday),
+    avgRate: all.length ? Math.round((saveToday / Math.max(1, all.reduce(function (s, p) { return s + (Number(p.price) || 0); }, 0))) * 1000) / 10 : 0,
+    wires: wire ? wire.shown : 0,
+    activities: acts.length,
+    rebateActivities: rebateActs.length,
+    top: top
+  };
 }
 
 /* ================= 对话转链：用户发链接 → 优惠归因链接 ================= */

@@ -23,14 +23,17 @@
 import {
   normalizeList, hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
   hdkActivityList, hdkConference, relayActivity, verifyActivities, withTimeout, pool,
-  hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
+  hdkWireCategories, hdkWireReport, hdkWireReportRecent, hdkMaterialCommunities, hdkMaterialItems,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
-  convertLink, proxyImage
+  convertLink, proxyImage, dailyStats, bjDate
 } from "./core.js";
 import { yzLifeBusinesses, yzPromotionLink } from "./yunzhan.js";
 import { sendAlert } from "./mailer.js";
+import { sendPush, htmlWrap } from "./push.js";
 
 const CACHE_TTL = 600;
+const WIRE_TTL = 180;   // 线报流动性高：3 分钟就重取一次
+const DAILY_CRON = "0 0 * * *";   // 北京时间每天 08:00 → 省钱日报推送
 const memCache = new Map();
 
 function cacheGet(key) {
@@ -345,6 +348,7 @@ async function llmChat(env, messages) {
           const link = await relayActivity(env, {
             activityId: hit.activityId,
             activityUrl: hit.url,
+            direct: hit.direct || "",
             title: hit.name,
             channel: hit.channel || ""
           });
@@ -505,6 +509,34 @@ function reportText(rep, down) {
     "\n\n后台：https://dash.cloudflare.com（Workers & Pages → yangmao-aihub → Logs）";
 }
 
+/* ---------------- 省钱日报：定时汇总 + 微信推送 ----------------
+ * 每天固定时间把「今天给你备好了多少优惠、一共能省多少」推到你微信。
+ * 通道见 push.js（PushPlus / 企业微信机器人），任配其一即可。
+ */
+async function dailyPush(env) {
+  const s = await dailyStats(env);
+  if (!s) return { skipped: "日报数据生成失败" };
+  const done = heavySet("daily:" + s.date, s).catch(() => { /* ignore */ });
+  try { await done; } catch (e) { /* ignore */ }
+
+  const topLines = (s.top || []).slice(0, 3).map((t, i) =>
+    (i + 1) + ". " + t.title.slice(0, 26) + "　券后 ¥" + t.endPrice + "（省 ¥" + t.off + "）").join("<br>");
+
+  const html = htmlWrap("省钱日报 · " + s.date, [
+    { t: "💰 今天一共能省多少", b:
+      "在架优惠 <b>" + s.deals + "</b> 件，其中带券 <b>" + s.couponDeals + "</b> 件<br>" +
+      "优惠券面额合计 <b style='color:#d93832'>¥" + s.couponSave + "</b><br>" +
+      "到手价比原价立省合计 <b style='color:#d93832'>¥" + s.instantSave + "</b>" },
+    { t: "📡 线报 & 会场", b:
+      "最近 24 小时新线报 <b>" + s.wires + "</b> 条<br>" +
+      "可领红包/会场 <b>" + s.activities + "</b> 个，其中 <b>" + s.rebateActivities + "</b> 个走你的专属优惠通道" },
+    { t: "🔥 今天最狠的几单", b: topLines || "暂无数据" }
+  ]);
+
+  const mail = await sendPush(env, "省钱日报 · " + s.date + "（今天能省 ¥" + s.instantSave + "）", html);
+  return { date: s.date, push: mail };
+}
+
 /* 定时预热：cron 每 30 分钟把两个重接口的缓存刷热（会场返利核验 + 本地生活列表），
  * 用户请求基本永远命中缓存，不再吃冷启动延迟 */
 async function warmup(env) {
@@ -623,35 +655,44 @@ export default {
         const r = await relayActivity(env, {
           activityId: body.activityId || "",
           activityUrl: body.activityUrl || "",
+          direct: body.direct || "",
           title: body.title || "双11红包会场",
           channel: body.channel || ""
         });
         return json(r);
       }
 
-      /* ---- 实时线报广场 ---- */
+      /* ---- 实时线报广场：默认按「最近 24 小时滚动总量」返回 ----
+       * 用户要的是当天总量（不是固定 10 条）：24 小时前的自动不再出现。
+       * 想回到分页老行为传 hours=0 即可。缓存 3 分钟（线报流动性高，不能像会场那样长缓存）。 */
       if (url.pathname === "/api/wire") {
         const sub = url.searchParams.get("sub") || "categories";
-        const key = "w:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "");
-        let data = cacheGet(key);
-        if (!data) {
-          if (sub === "categories") data = await hdkWireCategories();
-          else if (sub === "list") {
-            const type = url.searchParams.get("type") || "0";
-            const page = Number(url.searchParams.get("page") || 1);
-            data = await hdkWireReport(type, page);
-          } else if (sub === "material") {
-            const tag = url.searchParams.get("tag") || "宠物";
-            const comms = await hdkMaterialCommunities(tag);
-            const items = [];
-            for (const c of comms.slice(0, 1)) {
-              const list = await hdkMaterialItems(c.id, 1);
-              items.push.apply(items, list.slice(0, 12));
-            }
-            data = { total: items.length, items: items };
-          } else data = [];
-          cacheSet(key, data);
-        }
+        const hours = Number(url.searchParams.get("hours") === null ? 24 : url.searchParams.get("hours"));
+        const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + hours;
+        const hit = await heavyGet(key);
+        if (hit && (Date.now() - hit.t) / 1000 < WIRE_TTL) return json(hit.data);
+
+        let data = null;
+        if (sub === "categories") data = await hdkWireCategories();
+        else if (sub === "list") {
+          const type = url.searchParams.get("type") || "0";
+          data = hours > 0
+            ? await hdkWireReportRecent(type, hours)
+            : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
+        } else if (sub === "material") {
+          const tag = url.searchParams.get("tag") || "宠物";
+          const comms = await hdkMaterialCommunities(tag);
+          const items = [];
+          for (const c of comms.slice(0, 1)) {
+            const list = await hdkMaterialItems(c.id, 1);
+            items.push.apply(items, list.slice(0, 12));
+          }
+          data = { total: items.length, items: items };
+        } else data = [];
+        if (data === null) data = [];
+
+        const done = heavySet(key, data).catch(() => { /* ignore */ });
+        if (ctx && ctx.waitUntil) ctx.waitUntil(done); else await done;
         return json(data);
       }
 
@@ -746,12 +787,32 @@ export default {
         return json({ url: yzLink });
       }
 
+      /* ---- 省钱日报：今天为止的全站省钱数据（前端「省钱日报」页读它）---- */
+      if (url.pathname === "/api/daily") {
+        const key = "daily:" + bjDate(Date.now());
+        const hit = await heavyGet(key);
+        if (hit && (Date.now() - hit.t) / 1000 < 3600) return json(hit.data);
+        const data = await dailyStats(env);
+        if (!data) return json({ error: "日报生成失败，稍后再试" }, 502);
+        const done = heavySet(key, data).catch(() => { /* ignore */ });
+        if (ctx && ctx.waitUntil) ctx.waitUntil(done); else await done;
+        return json(data);
+      }
+
       /* ---- 健康检查：?deep=1 时做全链路体检 ---- */
       if (url.pathname === "/api/health") {
         if (url.searchParams.get("deep") === "1") {
           return json(await deepHealth(env));
         }
         return json({ ok: true, hasKey: !!env.HDK_APIKEY, hasLLM: !!env.LLM_API_KEY, ts: Date.now() });
+      }
+
+      /* ---- 省钱日报推送测试：?token= 鉴权，会真的推一条到微信 ---- */
+      if (url.pathname === "/api/daily/push") {
+        if (!env.ALERT_TOKEN || url.searchParams.get("token") !== env.ALERT_TOKEN) {
+          return json({ error: "token 不对" }, 403);
+        }
+        return json(await dailyPush(env));
       }
 
       /* ---- 告警通道测试：?token= 鉴权，成功会真的发一封邮件 ---- */
@@ -770,8 +831,17 @@ export default {
     }
   },
 
-  /* 定时任务：每 30 分钟全链路体检（异常发邮件）+ 重接口缓存预热（见 wrangler.toml [triggers]） */
+  /* 定时任务：
+   *  ① 每天 08:00（北京时间）= 生成「省钱日报」并推送到微信（PushPlus / 企业微信机器人）
+   *  ② 每 30 分钟 = 全链路体检（异常发邮件）+ 重接口缓存预热
+   * 见 wrangler.toml [triggers] */
   async scheduled(event, env, ctx) {
+    const cron = (event && event.cron) || "";
+    if (cron === DAILY_CRON) {
+      const run = dailyPush(env).catch(function (e) { return { error: String(e && e.message || e) }; });
+      if (ctx && ctx.waitUntil) ctx.waitUntil(run);
+      return { daily: true };
+    }
     const rep = scheduledHealth(env);
     if (ctx && ctx.waitUntil) ctx.waitUntil(warmup(env).catch(() => { /* ignore */ })); else await warmup(env).catch(() => { /* ignore */ });
     return rep;

@@ -60,10 +60,162 @@
     });
   }
 
+  /* ================= 我的星标宝贝（本地收藏，30 天自动过期） =================
+   * 站点没有账号体系，星标和「省钱记录」都存在浏览器本地 localStorage：
+   * 用户隐私不出本机，也不需要登录。30 天没再看的星标会自动消失（防囤积过期优惠）。
+   */
+  var STAR_KEY = "ck_star_items";
+  var STAR_TTL = 30 * 24 * 3600 * 1000;
+  var STAR_MAX = 200;
+
+  function starAll() {
+    var list;
+    try { list = JSON.parse(localStorage.getItem(STAR_KEY) || "[]"); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    var now = Date.now();
+    var kept = list.filter(function (x) { return x && x.k && (now - (x.ts || 0)) < STAR_TTL; });
+    if (kept.length !== list.length) {
+      try { localStorage.setItem(STAR_KEY, JSON.stringify(kept)); } catch (e) { /* ignore */ }
+    }
+    return kept.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  }
+  function starSave(list) {
+    try { localStorage.setItem(STAR_KEY, JSON.stringify(list.slice(0, STAR_MAX))); } catch (e) { /* 空间满就放弃 */ }
+    try { window.dispatchEvent(new CustomEvent("wool:star", { detail: { count: list.length } })); } catch (e) { /* ignore */ }
+  }
+  function starHas(k) {
+    return starAll().some(function (x) { return x.k === k; });
+  }
+  function starToggle(item) {
+    if (!item || !item.k) return false;
+    var list = starAll();
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i].k === item.k) { idx = i; break; }
+    if (idx > -1) { list.splice(idx, 1); starSave(list); return false; }
+    item.ts = Date.now();
+    list.unshift(item);
+    starSave(list);
+    return true;
+  }
+  function starRemove(k) {
+    var list = starAll().filter(function (x) { return x.k !== k; });
+    starSave(list);
+    return list;
+  }
+  function starRemoveMany(keys) {
+    var set = {};
+    (keys || []).forEach(function (k) { set[k] = 1; });
+    var list = starAll().filter(function (x) { return !set[x.k]; });
+    starSave(list);
+    return list;
+  }
+  function starClear() { starSave([]); return []; }
+  function starCount() { return starAll().length; }
+
+  var STAR_ICO = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.45 6.2 20.5l1.1-6.45-4.7-4.6 6.5-.95z"/></svg>';
+  /* 通用星标按钮：任何卡片都能挂一枚 */
+  function starBtn(item, label) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "star-btn" + (starHas(item.k) ? " on" : "");
+    b.setAttribute("aria-label", "星标收藏");
+    b.title = starHas(item.k) ? "已在「我的星标宝贝」，点击取消" : "加入「我的星标宝贝」";
+    b.innerHTML = STAR_ICO + (label ? '<span>' + esc(label) + '</span>' : "");
+    b.addEventListener("click", function (e) {
+      e.preventDefault(); e.stopPropagation();
+      var on = starToggle(item);
+      b.classList.toggle("on", on);
+      b.title = on ? "已在「我的星标宝贝」，点击取消" : "加入「我的星标宝贝」";
+      toast(on ? "⭐ 已收进「我的星标宝贝」" : "已取消星标");
+    });
+    return b;
+  }
+
+  /* ================= 省钱记录（本地埋点，供「省钱日报」用） ================= */
+  var SAVE_KEY = "ck_save_log";
+  var SAVE_TTL = 60 * 24 * 3600 * 1000;
+  var SAVE_MAX = 600;
+
+  function saveLogAll() {
+    var list;
+    try { list = JSON.parse(localStorage.getItem(SAVE_KEY) || "[]"); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    var now = Date.now();
+    return list.filter(function (x) { return x && (now - (x.ts || 0)) < SAVE_TTL; });
+  }
+  /* 每次用户真的点开一个优惠，就记一笔「这笔本来能省多少」 */
+  function logSave(item) {
+    if (!item) return;
+    var amount = Number(item.save) || 0;
+    if (amount <= 0) return;
+    var list = saveLogAll();
+    list.push({
+      ts: Date.now(),
+      k: item.k || "",
+      t: String(item.title || "").slice(0, 40),
+      s: Math.round(amount * 100) / 100
+    });
+    if (list.length > SAVE_MAX) list = list.slice(list.length - SAVE_MAX);
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(list)); } catch (e) { /* ignore */ }
+  }
+  function dayKey(ts) {
+    var d = new Date(ts + 8 * 3600 * 1000);   // 按北京时间分日
+    return d.toISOString().slice(0, 10);
+  }
+  /* 汇总：今天 / 昨天 / 近 7 天 / 累计 */
+  function saveStats() {
+    var list = saveLogAll();
+    var today = dayKey(Date.now());
+    var yest = dayKey(Date.now() - 86400000);
+    var acc = {};
+    list.forEach(function (x) {
+      var d = dayKey(x.ts);
+      if (!acc[d]) acc[d] = { d: d, count: 0, save: 0 };
+      acc[d].count++; acc[d].save += x.s;
+    });
+    var days = Object.keys(acc).map(function (k) { return acc[k]; }).sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+    var week = [];
+    for (var i = 0; i < 7; i++) {
+      var d = dayKey(Date.now() - i * 86400000);
+      week.push(acc[d] || { d: d, count: 0, save: 0 });
+    }
+    var total = list.reduce(function (s, x) { return s + x.s; }, 0);
+    return {
+      today: acc[today] || { d: today, count: 0, save: 0 },
+      yesterday: acc[yest] || { d: yest, count: 0, save: 0 },
+      week: week,
+      days: days,
+      total: Math.round(total * 100) / 100,
+      count: list.length
+    };
+  }
+  function clearSaveLog() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
+
   /* ================= 商品卡 / 领券（多页面共用） ================= */
 
   function fmtSales(n) { return n >= 10000 ? (n / 10000).toFixed(1).replace(/\.0$/, "") + " 万" : String(n); }
   function saveOf(p) { return Math.max(0, (Number(p.price) || 0) - (Number(p.endPrice) || 0)).toFixed(1).replace(/\.0$/, ""); }
+  /* 一件商品「能省多少」的统一口径：到手价 vs 原价，兜底用券面额 */
+  function itemSave(p) {
+    var s = (Number(p.price) || 0) - (Number(p.endPrice) || 0);
+    if (!(s > 0)) s = Number(p.coupon) || 0;
+    return Math.round(s * 10) / 10;
+  }
+  function starItemOfProduct(p) {
+    return {
+      k: "p:" + (p.id || p.title || ""),
+      type: "product",
+      title: p.title || "",
+      shop: p.shop || "",
+      pic: p.pic || "",
+      price: String(p.price || ""),
+      endPrice: String(p.endPrice || ""),
+      coupon: Number(p.coupon) || 0,
+      save: itemSave(p),
+      itemId: p.id || "",
+      url: p.couponurl || ""
+    };
+  }
   function picUrl(p) {
     if (!p.pic) return "";
     return API_BASE + "/api/img?u=" + encodeURIComponent(p.pic);
@@ -94,6 +246,7 @@
         '<button class="btn-coupon act-coupon">领券购买</button>' +
         '<button class="btn-copy act-copy">淘口令</button>' +
       '</div>';
+    el.appendChild(starBtn(starItemOfProduct(p)));   // 右上角星标
     el.querySelector(".act-coupon").addEventListener("click", function () { openCoupon(p); });
     el.querySelector(".act-copy").addEventListener("click", function () { copyTaoword(p); });
     var img = el.querySelector(".pcard-img img");
@@ -110,6 +263,7 @@
 
   /* 领券 / 淘口令：统一走 /api/coupon（ratesurl 转链，带归因参数） */
   function openCoupon(p) {
+    logSave({ k: "p:" + (p.id || p.title), title: p.title, save: itemSave(p) });
     if (p.couponurl) { window.open(p.couponurl, "_blank", "noopener"); return; }
     if (p.taoword) { copyText(p.taoword, "淘口令已复制，打开淘宝自动识别"); return; }
     if (!p.id) { toast("演示数据，暂无可领链接"); return; }
@@ -180,15 +334,22 @@
 
   function openActivity(a) {
     if (!a) { toast("会场加载中，稍后再试"); return; }
-    if (!a.activityId && !a.url) { toast("打开「" + a.name + "」：进入 " + a.platform + " APP 搜索同名会场"); return; }
+    var direct = a.direct || a.url || "";
+    if (!a.activityId && !direct) { toast("打开「" + a.name + "」：进入 " + a.platform + " APP 搜索同名会场"); return; }
 
     withPreWindow(function (land, dismiss) {
       apiPost("/api/redpacket", {
-        activityId: a.activityId, activityUrl: a.url, title: a.name, channel: a.channel || ""
+        activityId: a.activityId, activityUrl: a.url, direct: direct,
+        title: a.name, channel: a.channel || ""
       }).then(function (r) {
         if (r && r.needAuth) {
           dismiss();
-          if (window.confirm("「" + a.name + "」的专属优惠授权还没开通。\n\n现在去开通吗？（免费，约 1 分钟）")) {
+          if (window.confirm("「" + a.name + "」的专属优惠授权还没开通。\n\n" +
+            "开通方法（约 1 分钟）：\n" +
+            "1. 登录好单库 → 个人中心 → 授权管理 → 京东联盟账号授权\n" +
+            "2. 打开京东联盟「我的推广 → 我的工具 → 我的API」，领取授权key\n" +
+            "3. 把 京东联盟ID + 授权key + 失效日期 填进好单库授权处\n\n" +
+            "现在去好单库授权页吗？")) {
             window.open(r.authUrl, "_blank");
           }
           return;
@@ -196,15 +357,15 @@
         if (r && r.url) {
           land(r.url);
           toast(r.rebate ? "已生成你的专属优惠链接" : (r.note || "已为你打开活动页"));
-        } else if (a.url) {
-          land(a.url);
+        } else if (direct) {
+          land(direct);
           toast((r && r.note) || "已为你打开活动页");
         } else {
           dismiss();
           toast((r && r.note) || "该会场暂时没有可用链接，换个会场看看");
         }
       }).catch(function () {
-        if (a.url) { land(a.url); toast("已为你打开活动页"); }
+        if (direct) { land(direct); toast("已为你打开活动页"); }
         else { dismiss(); toast("网络开小差了，稍后再试"); }
       });
     });
@@ -294,7 +455,9 @@
       { href: "chat.html", label: "AI 找券对话", key: "chat",
         icon: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>' },
       { href: "coin.html", label: "淘金币互助", key: "coin",
-        icon: '<circle cx="12" cy="12" r="10"/><path d="M8.5 9.5c.5-1.2 1.9-2 3.5-2 2 0 3.5 1 3.5 2.4 0 1.3-1 2-3 2.4-2.2.4-3 1.2-3 2.5 0 1.4 1.5 2.4 3.5 2.4 1.6 0 3-.8 3.5-2"/><path d="M12 5.5v13"/>' }
+        icon: '<circle cx="12" cy="12" r="10"/><path d="M8.5 9.5c.5-1.2 1.9-2 3.5-2 2 0 3.5 1 3.5 2.4 0 1.3-1 2-3 2.4-2.2.4-3 1.2-3 2.5 0 1.4 1.5 2.4 3.5 2.4 1.6 0 3-.8 3.5-2"/><path d="M12 5.5v13"/>' },
+      { href: "star.html", label: "我的星标宝贝", key: "star", badge: "star",
+        icon: '<path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.45 6.2 20.5l1.1-6.45-4.7-4.6 6.5-.95z"/>' }
     ] },
     { group: "红包专区", items: [
       { href: "index.html#redpacket", label: "双11 红包入口", key: "rp",
@@ -316,7 +479,9 @@
       { href: "index.html#seckill", label: "今日秒杀", key: "sk",
         icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
       { href: "index.html#feed", label: "好价榜", key: "feed",
-        icon: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>' }
+        icon: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>' },
+      { href: "daily.html", label: "省钱日报", key: "daily",
+        icon: '<path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/>' }
     ] },
     { group: "聚合", items: [
       { href: "collection.html", label: "羊毛集合", key: "coll",
@@ -342,7 +507,7 @@
         var active = target === here ? " active" : "";
         html += '<a href="' + it.href + '" class="' + active.trim() + '">' +
           '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + it.icon + '</svg>' +
-          it.label + '</a>';
+          it.label + (it.badge === "star" ? '<b class="side-badge" data-star-badge></b>' : '') + '</a>';
       }
       html += '</nav></div>';
     }
@@ -363,6 +528,8 @@
       '<div class="side-scrim" id="sideScrim"></div>';
 
     document.body.insertAdjacentHTML("afterbegin", toggle + html);
+
+    paintStarBadges();   // 侧栏注入后补一次角标（DOMContentLoaded 时侧栏可能还没进 DOM）
 
     /* 把主内容（topnav/侧栏/按钮/script/toast 之外的所有节点）包进
      * .page-main-wrap，统一加左边距，免去逐个页面改结构 */
@@ -399,6 +566,16 @@
     });
   }
 
+  /* 侧栏「我的星标宝贝」实时计数：星标增减时（含跨标签页）自动刷新 */
+  function paintStarBadges() {
+    var n = starCount();
+    var all = document.querySelectorAll("[data-star-badge]");
+    for (var i = 0; i < all.length; i++) {
+      all[i].textContent = n ? String(n) : "";
+      all[i].style.display = n ? "" : "none";
+    }
+  }
+
   global.WOOL = {
     $: $, API_BASE: API_BASE, apiGet: apiGet, apiPost: apiPost,
     toast: toast, copyText: copyText, esc: esc, LOGO_SVG: LOGO_SVG,
@@ -408,10 +585,18 @@
     findActivity: findActivity,
     fmtSales: fmtSales, saveOf: saveOf, picUrl: picUrl,
     productCard: productCard, openCoupon: openCoupon, copyTaoword: copyTaoword,
+    /* 星标宝贝 + 省钱记录（本地存储，30 天过期） */
+    starBtn: starBtn, starToggle: starToggle, starHas: starHas, starList: starAll,
+    starRemove: starRemove, starRemoveMany: starRemoveMany, starClear: starClear, starCount: starCount,
+    starItemOfProduct: starItemOfProduct, itemSave: itemSave,
+    saveStats: saveStats, logSave: logSave, clearSaveLog: clearSaveLog,
     mountApiBanner: mountApiBanner
   };
 
   mountApiBanner();
+  paintStarBadges();
+  window.addEventListener("wool:star", paintStarBadges);
+  window.addEventListener("storage", function (e) { if (e.key === STAR_KEY) paintStarBadges(); });
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", buildPageSidebar);
   } else { buildPageSidebar(); }

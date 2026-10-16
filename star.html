@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的星标宝贝 — 羊毛AIHUB · AI 帮你找优惠</title>
+<meta name="keywords" content="我的收藏,优惠收藏夹,好价收藏,星标宝贝,省钱清单,优惠券收藏">
+<meta name="description" content="羊毛AIHUB 我的星标宝贝：把看中的好价、线报、红包会场标星存下来，最多保留 30 天；勾选几条一键统计一共能省多少钱，一目了然。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23d93832'/><g fill='%23ffffff'><circle cx='17' cy='20' r='6.5'/><circle cx='24' cy='18' r='6'/><circle cx='23' cy='25' r='5.5'/><circle cx='16' cy='26' r='5'/></g><ellipse cx='20' cy='25' rx='5' ry='4.6' fill='%23ffffff'/><circle cx='18.4' cy='24.3' r='0.9' fill='%23222'/><circle cx='21.6' cy='24.3' r='0.9' fill='%23222'/><g><circle cx='33.5' cy='12' r='4.6' fill='%23f6c544' stroke='%23e0a800' stroke-width='0.8'/><text x='33.5' y='14.6' font-size='6' font-weight='700' fill='%239a6a00' text-anchor='middle'>¥</text></g><rect x='4.5' y='4.5' width='13' height='8.6' rx='4' fill='%23111827'/><text x='11' y='10.7' font-size='6' font-weight='700' fill='%235eead4' text-anchor='middle'>AI</text></svg>">
+<link rel="stylesheet" href="assets/style.css?v=2.12">
+<meta name="robots" content="noindex,follow">
+<meta name="theme-color" content="#d93832">
+<meta name="author" content="省钱作业君">
+</head>
+<body>
+<header class="topnav" id="topnav"></header>
+
+<div class="star-head">
+  <div class="star-head-main">
+    <div>
+      <h1>⭐ 我的星标宝贝</h1>
+      <p>看中的好价、线报、红包会场，点一下星标就存进来 —— 最多保留 30 天，不怕错过也不怕囤过期。勾选几条，一键算清一共能省多少。</p>
+    </div>
+    <div class="star-head-side">
+      <span class="star-stat-chip" id="starHeadCount">— 件</span>
+    </div>
+  </div>
+</div>
+
+<section class="star-section">
+  <div class="star-toolbar">
+    <label class="star-check-all"><input type="checkbox" id="starAllChk"><span>全选</span></label>
+    <span class="star-sel-note" id="starSelNote">已选 0 件</span>
+    <span class="spacer"></span>
+    <button class="star-tool-btn" id="starSumBtn">📊 统计省钱</button>
+    <button class="star-tool-btn ghost" id="starDelBtn">删除选中</button>
+    <button class="star-tool-btn ghost" id="starClearBtn">清空</button>
+  </div>
+
+  <div class="star-sum" id="starSum" hidden></div>
+  <div class="star-grid" id="starGrid"></div>
+  <div class="star-foot-note" id="starFootNote">星标只存在你自己的浏览器里（我们看不到，也不需要登录）；超过 30 天没再看的宝贝会自动消失。</div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/common.js?v=2.12"></script>
+<script src="assets/star.js?v=2.12"></script>
+</body>
+</html>

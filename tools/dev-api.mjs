@@ -13,9 +13,9 @@ import { dirname, join } from "node:path";
 import {
   hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
   hdkActivityList, hdkConference, relayActivity,
-  hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
+  hdkWireCategories, hdkWireReport, hdkWireReportRecent, hdkMaterialCommunities, hdkMaterialItems,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
-  convertLink, proxyImage
+  convertLink, proxyImage, dailyStats, bjDate
 } from "../worker/src/core.js";
 import { yzLifeBusinesses, yzPromotionLink } from "../worker/src/yunzhan.js";
 
@@ -392,23 +392,26 @@ const server = createServer(async (req, res) => {
       const r = await relayActivity(env, {
         activityId: body.activityId || "",
         activityUrl: body.activityUrl || "",
+        direct: body.direct || "",
         title: body.title || "双11红包会场",
         channel: body.channel || ""
       });
       return json(res, r);
     }
 
-    /* ---- 实时线报广场 ---- */
+    /* ---- 实时线报广场：默认 24 小时滚动总量 ---- */
     if (url.pathname === "/api/wire") {
       const sub = url.searchParams.get("sub") || "categories";
-      const key = "w:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "");
+      const hours = Number(url.searchParams.get("hours") === null ? 24 : url.searchParams.get("hours"));
+      const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + hours;
       let data = cacheGet(key);
       if (!data) {
         if (sub === "categories") data = await hdkWireCategories();
         else if (sub === "list") {
           const type = url.searchParams.get("type") || "0";
-          const page = Number(url.searchParams.get("page") || 1);
-          data = await hdkWireReport(type, page);
+          data = hours > 0
+            ? await hdkWireReportRecent(type, hours)
+            : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
         } else if (sub === "material") {
           const tag = url.searchParams.get("tag") || "宠物";
           const comms = await hdkMaterialCommunities(tag);
@@ -421,6 +424,16 @@ const server = createServer(async (req, res) => {
         } else data = [];
         cacheSet(key, data);
       }
+      return json(res, data);
+    }
+
+    /* ---- 省钱日报 ---- */
+    if (url.pathname === "/api/daily") {
+      if (!env.HDK_APIKEY) return json(res, { error: "未配置 HDK_APIKEY" }, 503);
+      const key = "daily:" + bjDate(Date.now());
+      let data = cacheGet(key);
+      if (!data) { data = await dailyStats(env); cacheSet(key, data); }
+      if (!data) return json(res, { error: "日报生成失败" }, 502);
       return json(res, data);
     }
 

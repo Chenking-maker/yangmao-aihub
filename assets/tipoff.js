@@ -59,6 +59,21 @@
     return "";
   }
 
+  /* 把一条线报整理成「星标宝贝」结构 */
+  function wireStarItem(it) {
+    var text = (it.lines || []).map(function (l) { return l.text || ""; }).filter(Boolean).join(" ");
+    text = text.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+    return {
+      k: "w:" + it.id,
+      type: "wire",
+      title: text.slice(0, 180) || (it.platform + " · " + (it.time || "实时线报")),
+      pic: (it.images && it.images[0]) || "",
+      platform: it.platform,
+      time: it.time || "",
+      save: 0
+    };
+  }
+
   function renderWireItem(it) {
     var card = document.createElement("div");
     card.className = "wire-card";
@@ -91,6 +106,10 @@
       '</div>' +
       '<div class="wire-lines">' + linesHtml + '</div>' +
       imgsHtml;
+
+    // 星标：把这条线报存进「我的星标宝贝」
+    var top = card.querySelector(".wire-card-top");
+    if (top) top.appendChild(W.starBtn(wireStarItem(it)));
 
     // 绑定转链按钮
     card.querySelectorAll(".act-convert").forEach(function (btn) {
@@ -163,6 +182,24 @@
     refreshBtn.disabled = on;
   }
 
+  var WIRE_BATCH = 40;
+
+  /* 一次可能几百条线报，分批渲染：先出 40 条，剩下的点「加载更多」 */
+  function renderBatch(items, from) {
+    var end = Math.min(items.length, from + WIRE_BATCH);
+    for (var i = from; i < end; i++) listEl.appendChild(renderWireItem(items[i]));
+    var old = $("wireMore");
+    if (old) old.remove();
+    if (end < items.length) {
+      var btn = document.createElement("button");
+      btn.className = "wire-more";
+      btn.id = "wireMore";
+      btn.textContent = "加载更多（还有 " + (items.length - end) + " 条）";
+      btn.addEventListener("click", function () { renderBatch(items, end); });
+      listEl.appendChild(btn);
+    }
+  }
+
   function loadList(tab) {
     loading = true;
     setRefreshing(true);
@@ -170,15 +207,21 @@
     showSkeleton();
     var url = tab.src === "material"
       ? "/api/wire?sub=material&tag=" + encodeURIComponent(tab.q)
-      : "/api/wire?sub=list&type=" + encodeURIComponent(tab.q) + "&page=1";
+      : "/api/wire?sub=list&type=" + encodeURIComponent(tab.q);
     apiGet(url).then(function (d) {
       loading = false;
       setRefreshing(false);
       listEl.innerHTML = "";
       var items = (d && d.items) || [];
       if (!items.length) { showEmpty(tab); return; }
-      metaEl.innerHTML = '当前分类共 <b>' + items.length + '</b> 条线报 · 数据实时同步';
-      items.forEach(function (it) { listEl.appendChild(renderWireItem(it)); });
+      if (tab.src === "material") {
+        metaEl.innerHTML = '共 <b>' + items.length + '</b> 条推荐好物 · 数据实时同步 · 点右上角 ⭐ 可收藏';
+      } else {
+        var hours = (d && d.hours) || 24;
+        metaEl.innerHTML = '最近 <b>' + hours + '</b> 小时共 <b>' + items.length +
+          '</b> 条线报 · ' + hours + ' 小时前的自动下线 · 点右上角 ⭐ 可收藏';
+      }
+      renderBatch(items, 0);
     }).catch(function () {
       loading = false;
       setRefreshing(false);

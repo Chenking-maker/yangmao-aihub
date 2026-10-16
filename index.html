@@ -7,7 +7,7 @@
 <meta name="description" content="羊毛AIHUB：搭上 AI 最智能的模型，让羊毛不再传统。和 AI 说想买啥，自动找隐藏优惠券；双11 超级红包、京享红包一键领；美团外卖红包、凑单工具、今日秒杀、好价榜实时更新，全免费。">
 <meta name="keywords" content="薅羊毛,优惠券,隐藏优惠券,双11红包,超级红包口令,天猫优惠券,淘宝优惠券怎么领,凑单神器,好价榜,9.9包邮,AI找券,省钱APP,网购省钱">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' rx='10' fill='%23d93832'/><g fill='%23ffffff'><circle cx='17' cy='20' r='6.5'/><circle cx='24' cy='18' r='6'/><circle cx='23' cy='25' r='5.5'/><circle cx='16' cy='26' r='5'/></g><ellipse cx='20' cy='25' rx='5' ry='4.6' fill='%23ffffff'/><circle cx='18.4' cy='24.3' r='0.9' fill='%23222'/><circle cx='21.6' cy='24.3' r='0.9' fill='%23222'/><path d='M16 21 q-2.6 -1 -2.7 -3.7 q2.6 0.8 3.7 2.9z' fill='%23eef0f3'/><path d='M24 21 q2.6 -1 2.7 -3.7 q-2.6 0.8 -3.7 2.9z' fill='%23eef0f3'/><g><circle cx='33.5' cy='12' r='4.6' fill='%23f6c544' stroke='%23e0a800' stroke-width='0.8'/><text x='33.5' y='14.6' font-size='6' font-weight='700' fill='%239a6a00' text-anchor='middle'>¥</text></g><rect x='4.5' y='4.5' width='13' height='8.6' rx='4' fill='%23111827'/><text x='11' y='10.7' font-size='6' font-weight='700' fill='%235eead4' text-anchor='middle'>AI</text><path d='M10.4 12.4 l-1.2 3.4 1.9 -0.7 -1 3.4' fill='none' stroke='%23ffd23f' stroke-width='1.3' stroke-linejoin='round' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="assets/style.css?v=2.9">
+<link rel="stylesheet" href="assets/style.css?v=2.12">
 <!-- seo:auto -->
 <link rel="canonical" href="https://chenking-maker.github.io/yangmao-aihub/">
 <meta name="robots" content="index,follow,max-image-preview:large">
@@ -49,6 +49,10 @@
         <a href="coin.html">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8.5 9.5c.5-1.2 1.9-2 3.5-2 2 0 3.5 1 3.5 2.4 0 1.3-1 2-3 2.4-2.2.4-3 1.2-3 2.5 0 1.4 1.5 2.4 3.5 2.4 1.6 0 3-.8 3.5-2"/><path d="M12 5.5v13"/></svg>
           淘金币互助
+        </a>
+        <a href="star.html">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.45 6.2 20.5l1.1-6.45-4.7-4.6 6.5-.95z"/></svg>
+          我的星标宝贝<b class="side-badge" data-star-badge></b>
         </a>
       </nav>
     </div>
@@ -100,6 +104,10 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
           好价榜
         </a>
+        <a href="daily.html">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+          省钱日报
+        </a>
       </nav>
     </div>
 
@@ -143,6 +151,9 @@
       </div>
       <div class="hero-mascot" id="heroMascot"></div>
     </section>
+
+    <!-- 我的省钱日报（本机记录，增强粘性） -->
+    <section class="daily-band" id="dailyBand"></section>
 
     <!-- 双11 红包入口（首页顶部） -->
     <section class="rp-band" id="redpacket">
@@ -366,9 +377,9 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="assets/common.js?v=2.9"></script>
-<script src="assets/data.js?v=2.9"></script>
-<script src="assets/chat-core.js?v=2.9"></script>
-<script src="assets/app.js?v=2.9"></script>
+<script src="assets/common.js?v=2.12"></script>
+<script src="assets/data.js?v=2.12"></script>
+<script src="assets/chat-core.js?v=2.12"></script>
+<script src="assets/app.js?v=2.12"></script>
 </body>
 </html>

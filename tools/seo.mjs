@@ -34,6 +34,12 @@ const PAGES = {
     type: "website",
     priority: "0.9"
   },
+  "daily.html": {
+    loc: "/daily.html",
+    kw: "省钱日报,每天省多少,网购省钱统计,优惠汇总,双11省钱,省钱记录,昨天省了多少",
+    type: "website",
+    priority: "0.7"
+  },
   "collection.html": {
     loc: "/collection.html",
     kw: "双11红包会场,超级红包入口,美团外卖红包,美团闪购优惠,本地生活优惠,到店优惠券,红包天天领",

@@ -38,6 +38,32 @@
 
   var state = { hasKey: false, llmReady: false, feedCache: {}, activities: [] };
 
+  /* ---------- 我的省钱日报（本地记录，增强粘性） ---------- */
+  (function mountDailyBand() {
+    var host = $("dailyBand");
+    if (!host || !W.saveStats) return;
+    function paint() {
+      var s = W.saveStats();
+      var starN = W.starCount();
+      host.innerHTML =
+        '<div class="db-card">' +
+          '<span class="db-ico">📊</span>' +
+          '<span class="db-body">' +
+            '<span class="db-t">我的省钱日报</span>' +
+            '<span class="db-s">今天已省 <b>¥' + (Math.round(s.today.save * 10) / 10) + '</b>' +
+              '　·　累计 ¥' + (Math.round(s.total * 10) / 10) +
+              '　·　星标宝贝 <b>' + starN + '</b> 件' +
+              (s.yesterday.count ? '　·　昨天省 ¥' + (Math.round(s.yesterday.save * 10) / 10) : '') +
+            '</span>' +
+          '</span>' +
+          '<a class="db-btn" href="daily.html">看日报 ›</a>' +
+          '<a class="db-btn ghost" href="star.html">⭐ 我的星标宝贝</a>' +
+        '</div>';
+    }
+    paint();
+    window.addEventListener("wool:star", paint);
+  })();
+
   /* ---------- 双11 倒计时 ---------- */
   var EVENTS = [
     { name: "付尾款", at: new Date("2026-11-01T00:00:00+08:00") },
@@ -115,7 +141,11 @@
           (Number(p.coupon) > 0 ? '<span class="coupon">券 ¥' + p.coupon + '</span>' : "") +
         '</div>' +
       '</div>';
-    el.addEventListener("click", function () { W.openCoupon(p); });
+    el.appendChild(W.starBtn(W.starItemOfProduct(p)));
+    el.addEventListener("click", function (e) {
+      if (e.target.closest(".star-btn")) return;   // 点星星不算点卡片
+      W.openCoupon(p);
+    });
     var img = el.querySelector(".sk-img img");
     if (img) {
       var retried = false;
@@ -174,6 +204,11 @@
         '<div class="act-time">' + W.esc(a.period || "") +
           (a.rebate ? ' <span class="rebate-dot">专属优惠</span>' : (a.needAuth ? ' <span class="rebate-dot soon">待开通</span>' : '')) + '</div>' +
         '<button class="act-btn">进入会场 ›</button>';
+      el.querySelector(".act-top").appendChild(W.starBtn({
+        k: "a:" + (a.activityId || a.id || a.name), type: "activity", title: a.name,
+        platform: a.platform, activityId: a.activityId || "", url: a.url || "",
+        direct: a.direct || "", channel: a.channel || "", save: 0
+      }));
       el.querySelector(".act-btn").addEventListener("click", function () {
         openRedpacket(state.activities.length ? findActivity(a.name) : a);
       });
