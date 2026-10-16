@@ -763,7 +763,9 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
   padding: 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow-card);
 }
 .life-top { display: flex; align-items: center; gap: 10px; }
-.life-ico { width: 38px; height: 38px; border-radius: 11px; background: var(--surface-3); border: 1px solid var(--hairline); display: grid; place-items: center; font-size: 19px; flex: none; }
+.life-ico { width: 38px; height: 38px; border-radius: 11px; background: var(--surface-3); border: 1px solid var(--hairline); display: grid; place-items: center; font-size: 19px; flex: none; overflow: hidden; }
+.life-ico.img { background: #fff; }
+.life-ico.img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .life-name { font-size: 14px; font-weight: 600; }
 .life-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
 .life-desc { font-size: 12.5px; color: var(--text-2); }
@@ -972,6 +974,7 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
 }
 .about-features li::before { content: "✓"; position: absolute; left: 0; color: var(--red); font-weight: 700; }
 .about-features li b { color: var(--text); }
+.about-punch { font-size: 14px; color: var(--text); font-weight: 600; background: rgba(217, 56, 50, .06); border-left: 3px solid var(--red); border-radius: 0 8px 8px 0; padding: 11px 15px; line-height: 1.8; }
 .about-free {
   font-size: 12.5px; color: var(--red); font-weight: 600;
   background: var(--red-bg); border: 1px solid var(--red-border);

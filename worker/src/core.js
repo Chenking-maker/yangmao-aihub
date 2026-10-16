@@ -179,6 +179,54 @@ export async function hdkConference(env, opts) {
   return { url: opts.activityUrl || "", taoCode: "", shortUrl: "", fallback: true };
 }
 
+/* ================= 本地生活（美团 CPS，走好单库，免费）=================
+ * 好单库开放平台自带「美团活动列表 + 美团转链」，只要 HDK_APIKEY 已开通外卖权限即可，
+ * 无需第三方平台凭据。实测返回：red_activity（长期红包）/ time_activity（限时活动）。
+ */
+
+export async function hdkMeituanActivities(env) {
+  var url = HDK_BASE + "/meituan_activity_list?apikey=" + encodeURIComponent(env.HDK_APIKEY);
+  try {
+    var res = await fetch(url);
+    var j = await res.json();
+    if (!j || Number(j.code) !== 200 || !j.data) return null;
+    return j.data;
+  } catch (e) { return null; }
+}
+
+export async function hdkMeituanLink(env, activityId, linkType) {
+  var types = linkType ? [linkType] : [1, 2, 3];
+  for (var i = 0; i < types.length; i++) {
+    var body = new URLSearchParams({
+      apikey: env.HDK_APIKEY,
+      activity_id: String(activityId),
+      link_type: String(types[i]),
+      channel: "ck_hub"
+    });
+    try {
+      var res = await fetch(HDK_BASE + "/meituan_ratesurl", { method: "POST", body: body });
+      var j = await res.json();
+      if (j && Number(j.code) === 200 && j.data && j.data.url) return j.data.url;
+    } catch (e) { /* 换下一种链接类型 */ }
+  }
+  return "";
+}
+
+/* 美团活动 → 前端统一卡片结构（不暴露任何佣金字段） */
+export function normalizeMeituanActivity(a) {
+  var name = a.activity_name || "美团活动";
+  var cat = /闪购/.test(name) ? "美团闪购" : (/外卖|美食/.test(name) ? "外卖红包" : "美团优惠");
+  return {
+    id: "mt:" + (a.activity_id || ""),
+    name: name,
+    cat: cat,
+    icon: /闪购/.test(name) ? "🛒" : (/外卖|美食/.test(name) ? "🍜" : "🎫"),
+    image: a.activity_image || "",
+    desc: a.activity_desc_private || "领券下单更划算",
+    src: "meituan"
+  };
+}
+
 /* ================= 实时线报广场 ================= */
 
 var WIRE_PLATFORM = { "1": "淘宝", "2": "京东", "3": "飞猪" };

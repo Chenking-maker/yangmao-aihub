@@ -24,6 +24,7 @@ import {
   normalizeList, hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
   hdkActivityList, hdkConference,
   hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
+  hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity,
   convertLink, proxyImage
 } from "./core.js";
 import { yzLifeBusinesses, yzPromotionLink } from "./yunzhan.js";
@@ -234,7 +235,7 @@ async function llmChat(env, messages) {
         authorization: "Bearer " + env.LLM_API_KEY
       },
       body: JSON.stringify({
-        model: env.LLM_MODEL || "deepseek-ai/DeepSeek-V4.1-Flash",
+        model: env.LLM_MODEL || "Qwen/Qwen2.5-7B-Instruct",
         messages: chatMessages,
         tools: TOOLS,
         temperature: 0.5,
@@ -310,10 +311,52 @@ async function llmChat(env, messages) {
   return { reply: "这次没查到合适的，换个关键词再试试？", products, redpackets, links };
 }
 
+/* 本地生活业务列表：美团（好单库，免额外凭据）优先；云瞻仅在配置了凭据时作补充 */
+async function lifeBusinessList(env) {
+  var out = [];
+  if (env.HDK_APIKEY) {
+    var d = await hdkMeituanActivities(env);
+    if (d) {
+      var now = Math.floor(Date.now() / 1000);
+      var seen = {};
+      (d.red_activity || []).concat(d.time_activity || []).forEach(function (a) {
+        if (!a || !a.activity_id || seen[a.activity_id]) return;
+        if (a.end_time && Number(a.end_time) < now) return; // 已结束的活动不展示
+        seen[a.activity_id] = 1;
+        out.push(normalizeMeituanActivity(a));
+      });
+      // 外卖 / 闪购类红包排前面
+      out.sort(function (x, y) {
+        var w = function (i) { return /外卖|闪购/.test(i.name) ? 0 : 1; };
+        return w(x) - w(y);
+      });
+      out = out.slice(0, 9);
+    }
+  }
+  if (out.length < 4 && env.YZ_APP_KEY && env.YZ_APP_SECRET) {
+    var yz = await yzLifeBusinesses(env);
+    (yz || []).forEach(function (b) { out.push(b); });
+  }
+  return out;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method === "OPTIONS") return json({}, 204);
+    // CORS 预检：必须返回「无 body 的 204」+ CORS 头。
+    // 注意：不能用 json({}, 204)——Response 在 204 状态下不允许带 body，
+    // 构造时会直接抛异常导致预检 500，浏览器随即拦下所有跨域 POST（转链/领券/AI 对话）。
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,POST,OPTIONS",
+          "access-control-allow-headers": "content-type",
+          "access-control-max-age": "86400"
+        }
+      });
+    }
 
     const ip = request.headers.get("cf-connecting-ip") || "anon";
     if (!rateLimit(ip)) return json({ error: "请求太频繁，歇一会儿再试" }, 429);
@@ -442,30 +485,30 @@ export default {
         return json(await hdkRelink(env, body.itemid, body.title));
       }
 
-      /* ---- 本地生活（云瞻 CPS）：热门业务列表 ---- */
+      /* ---- 本地生活：热门业务列表（美团走好单库，零第三方凭据）---- */
       if (url.pathname === "/api/life/business") {
-        if (!env.YZ_APP_KEY || !env.YZ_APP_SECRET) {
-          return json({ configured: false, items: [] });
-        }
-        let data = cacheGet("life:biz");
-        if (!data) { data = await yzLifeBusinesses(env); cacheSet("life:biz", data); }
-        return json({ configured: true, items: data || [] });
+        var items = cacheGet("life:biz2");
+        if (!items) { items = await lifeBusinessList(env); cacheSet("life:biz2", items); }
+        return json({ configured: !!(items && items.length), items: items || [] });
       }
 
-      /* ---- 本地生活（云瞻 CPS）：获取某个业务的推广链接 ---- */
+      /* ---- 本地生活：获取某个业务的推广链接 ---- */
       if (url.pathname === "/api/life/link" && request.method === "POST") {
-        if (!env.YZ_APP_KEY || !env.YZ_APP_SECRET) {
-          return json({ error: "本地生活优惠还没开通" }, 503);
-        }
-        if (!env.YZ_PROMOTION_ID) {
-          return json({ error: "推广位还没配置" }, 503);
-        }
         const body = await request.json().catch(() => ({}));
-        const id = String(body.id || "").slice(0, 20);
+        const id = String(body.id || "").slice(0, 40);
         if (!id) return json({ error: "缺少业务 id" }, 400);
-        const link = await yzPromotionLink(env, id, 1);
-        if (!link) return json({ error: "这个链接刚才没取到，稍后再试一下" }, 502);
-        return json({ url: link });
+        if (id.indexOf("mt:") === 0) {
+          if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
+          const link = await hdkMeituanLink(env, id.slice(3));
+          if (!link) return json({ error: "这个活动暂时取不到链接，换一个试试" }, 502);
+          return json({ url: link });
+        }
+        if (!env.YZ_APP_KEY || !env.YZ_APP_SECRET || !env.YZ_PROMOTION_ID) {
+          return json({ error: "该业务的优惠链接还没开通" }, 503);
+        }
+        const yzLink = await yzPromotionLink(env, id, 1);
+        if (!yzLink) return json({ error: "这个链接刚才没取到，稍后再试一下" }, 502);
+        return json({ url: yzLink });
       }
 
       return json({ error: "not found" }, 404);

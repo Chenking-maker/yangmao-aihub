@@ -49,7 +49,7 @@
     collGrid.innerHTML = '<div class="empty-note">网络开小差了，刷新页面试试</div>';
   });
 
-  /* ---- 本地生活（云瞻 CPS 平台，实时业务） ---- */
+  /* ---- 本地生活（美团 CPS 实时活动，走好单库） ---- */
   var lifeGrid = $("lifeGrid");
   var lifeSec = lifeGrid ? lifeGrid.closest(".coll-section") : null;
 
@@ -87,18 +87,21 @@
       var tag = lifeSec.querySelector(".tag");
       if (tag) tag.textContent = "已开通 " + r.items.length + " 项 · 实时同步";
       var note = lifeSec.querySelector(".coll-note");
-      if (note) note.textContent = "点「获取优惠链接」会自动生成你的专属推广链接，打开后领券下单，价格不变还能拿优惠。";
+      if (note) note.textContent = "美团外卖、闪购、神券等本地生活优惠，点「获取优惠链接」生成你的专属链接，打开领券下单更划算。";
     }
     lifeGrid.innerHTML = "";
     r.items.forEach(function (b) {
       var el = document.createElement("div");
       el.className = "life-card on";
+      var ico = b.image
+        ? '<div class="life-ico img"><img src="' + W.esc(b.image) + '" referrerpolicy="no-referrer" alt=""></div>'
+        : '<div class="life-ico">' + (b.icon || "🎁") + '</div>';
       el.innerHTML =
-        '<div class="life-top"><div class="life-ico">' + b.icon + '</div>' +
+        '<div class="life-top">' + ico +
         '<div style="flex:1;min-width:0"><div class="life-name">' + W.esc(b.name) + '</div>' +
         '<div class="life-sub">' + W.esc(b.cat) + (b.commission ? " · 佣金 " + W.esc(b.commission) : "") + '</div></div>' +
         '<span class="status-badge on">可领</span></div>' +
-        '<div class="life-desc">点击生成专属优惠链接，领券下单更划算</div>' +
+        '<div class="life-desc">' + W.esc(b.desc || "点击生成专属优惠链接，领券下单更划算") + '</div>' +
         '<button class="life-btn on">获取优惠链接 ›</button>';
       el.querySelector(".life-btn").addEventListener("click", function () {
         var btn = el.querySelector(".life-btn");
