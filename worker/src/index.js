@@ -34,6 +34,8 @@ import { sendPush, htmlWrap } from "./push.js";
 
 const CACHE_TTL = 600;
 const WIRE_TTL = 180;   // 线报流动性高：3 分钟就重取一次
+const WIRE_STALE_TTL = 1800;  // 旧线报最多顶 30 分钟（先秒回，后台换新）
+const WIRE_BUDGET = 8000;     // 翻页抓线报的总时间预算：到点就收手，有多少返多少
 const DAILY_CRON = "0 0 * * *";   // 北京时间每天 08:00 → 省钱日报推送
 const memCache = new Map();
 
@@ -566,6 +568,11 @@ async function warmup(env) {
   try {
     await heavySet("life:biz2", await lifeBusinessList(env));
   } catch (e) { /* ignore */ }
+  /* 线报广场默认页（「全部」= 12 小时 / 50 条）也一起预热，
+     用户点进线报页永远是热缓存，不用等翻页 */
+  try {
+    await heavySet("wn:list:0::12:50", await hdkWireReportRecent("0", 12, 50, 6000));
+  } catch (e) { /* ignore */ }
 }
 
 async function scheduledHealth(env) {
@@ -691,28 +698,45 @@ export default {
         const hours = Number(rawHours === null ? 12 : rawHours);
         const max = Math.min(Math.max(Number(url.searchParams.get("max")) || 200, 20), 300);
         const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + hours + ":" + max;
-        const hit = await heavyGet(key);
-        if (hit && (Date.now() - hit.t) / 1000 < WIRE_TTL) return json(hit.data);
 
-        let data = null;
-        if (sub === "categories") data = await hdkWireCategories();
-        else if (sub === "list") {
-          const type = url.searchParams.get("type") || "0";
-          data = hours > 0
-            ? await hdkWireReportRecent(type, hours, max)
-            : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
-        } else if (sub === "material") {
-          const tag = url.searchParams.get("tag") || "宠物";
-          const comms = await hdkMaterialCommunities(tag);
-          const items = [];
-          for (const c of comms.slice(0, 1)) {
-            const list = await hdkMaterialItems(c.id, 1);
-            items.push.apply(items, list.slice(0, 12));
+        /* 翻页拉线报要打很多次上游，而 Cloudflare 边缘到好单库一次就可能要好几秒，
+           所以这里最看重「秒回」：只要缓存里还有东西，哪怕旧了也先发给用户，
+           后台悄悄换新。真没缓存才阻塞等一次（带 8 秒预算）。 */
+        const build = async () => {
+          let data = null;
+          if (sub === "categories") data = await hdkWireCategories();
+          else if (sub === "list") {
+            const type = url.searchParams.get("type") || "0";
+            data = hours > 0
+              ? await hdkWireReportRecent(type, hours, max, WIRE_BUDGET)
+              : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
+          } else if (sub === "material") {
+            const tag = url.searchParams.get("tag") || "宠物";
+            const comms = await hdkMaterialCommunities(tag);
+            const items = [];
+            for (const c of comms.slice(0, 1)) {
+              const list = await hdkMaterialItems(c.id, 1);
+              items.push.apply(items, list.slice(0, 12));
+            }
+            data = { total: items.length, items: items };
           }
-          data = { total: items.length, items: items };
-        } else data = [];
-        if (data === null) data = [];
+          return data === null ? [] : data;
+        };
 
+        const hit = await heavyGet(key);
+        if (hit) {
+          const age = (Date.now() - hit.t) / 1000;
+          if (age < WIRE_TTL) return json(hit.data);
+          if (age < WIRE_STALE_TTL) {
+            /* 旧数据先顶上，后台换新 —— 用户永远不用等翻页 */
+            if (ctx && ctx.waitUntil) {
+              ctx.waitUntil(Promise.resolve().then(build).then(d => heavySet(key, d)).catch(() => { /* 刷新失败继续用旧的 */ }));
+            }
+            return json(hit.data);
+          }
+        }
+
+        const data = await build();
         const done = heavySet(key, data).catch(() => { /* ignore */ });
         if (ctx && ctx.waitUntil) ctx.waitUntil(done); else await done;
         return json(data);

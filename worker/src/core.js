@@ -562,13 +562,16 @@ export function parseWireTime(s) {
  *  ·    - 24 小时前（或超出条数上限）的自动下线，最新的一定排在最前面。
  *  ·
  *  ·  翻页是自适应的：收够条数、或整批都早于窗口、或上游翻到底了就立刻收手，绝不空拉。
+ *  ·  再加一道「总时间预算」：Cloudflare 边缘到好单库偶尔一次要好几秒，
+ *  ·  翻页一多就把用户晾在那儿了 —— 超预算就收手，有多少返多少（前端照样有内容）。
  *  ·  返回 { items, total, shown, hours, max, since, until }
  */
-export async function hdkWireReportRecent(type, hours, max) {
+export async function hdkWireReportRecent(type, hours, max, budgetMs) {
   hours = Math.min(Math.max(Number(hours) || 12, 1), 720);
   max = Math.min(Math.max(Number(max) || 200, 20), 300);
   var cutoff = Date.now() - hours * 3600 * 1000;
-  var MAXP = 30, BATCH = 4;
+  var deadline = Date.now() + Math.min(Math.max(Number(budgetMs) || 8000, 1500), 25000);
+  var MAXP = 30, BATCH = 8;    // 并发提到 8：批数少了，等待轮次也少了
   var row = [];     // { it, t }
   var total = 0;
 
@@ -583,15 +586,20 @@ export async function hdkWireReportRecent(type, hours, max) {
   }
 
   for (var start = 1; start <= MAXP; start += BATCH) {
+    if (start > 1 && Date.now() >= deadline) break;   // 预算用完，立刻收手
     var nums = [];
     for (var i = start; i < start + BATCH && i <= MAXP; i++) nums.push(i);
     var res = [];
     await pool(nums, BATCH, async function (p) {
-      try { res.push({ p: p, r: await hdkWireReport(type, p) }); } catch (e) { /* 单页失败跳过 */ }
+      try {
+        /* 单页最多等 5 秒：一页卡死不能把整个请求拖垮 */
+        var r = await withTimeout(hdkWireReport(type, p), 5000, "页" + p);
+        if (r) res.push({ p: p, r: r });
+      } catch (e) { /* 单页失败跳过 */ }
     });
     if (!res.length) break;
     res.sort(function (a, b) { return a.p - b.p; });
-    if (start === 1) total = (res[0].r && res[0].r.total) || 0;
+    if (start === 1 && res[0].r) total = res[0].r.total || 0;
 
     var batchAllOld = true, got = 0;
     res.forEach(function (x) {
