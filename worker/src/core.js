@@ -376,9 +376,11 @@ export async function verifyActivities(env, list, limit) {
       } else if (a.channel === "mt") {
         a.rebate = !!(a.activityId && (await withTimeout(hdkMeituanLink(env, a.activityId, 1), 5000, "mt转链")));
       } else if (a.channel === "jd") {
-        var r = await withTimeout(jdConference(env, a.url, a.name), 5000, "jd转链");
-        a.rebate = !!(r && r.url);
-        a.needAuth = !!(r && r.needAuth);
+        /* 京东：没配上推广链接就是「未配返利」——先给默认值，免得核验超时后变成一张没标的灰卡 */
+        a.rebate = false;
+        a.needAuth = true;
+        var r = await withTimeout(jdConference(env, a.url, a.name), 6000, "jd转链");
+        if (r && r.url) { a.rebate = true; a.needAuth = false; }
       }
     } catch (e) { a.rebate = false; }
   });
