@@ -20,3 +20,4 @@ tools/.env
 
 # 内部工作记忆（含运营细节，不进公共仓库）
 .workbuddy/
+tools/_v.mjs
