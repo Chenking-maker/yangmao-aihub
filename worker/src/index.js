@@ -44,25 +44,28 @@ function cacheSet(key, data) {
 }
 
 /* 重接口专用「过期缓存兜底」（stale-while-revalidate）：
- * 10 分钟内直接命中；10 分钟~1 小时之间先返回旧数据、后台静默刷新 ——
- * 好单库核验链路较重（一次要探好几条转链），绝不能让用户干等冷启动。 */
+ * L1 = isolate 内存（最快）；L2 = Cache API（跨 isolate / 同机房共享，内存缓存靠不住的地方靠它）。
+ * 10 分钟内直接命中；10 分钟~1 小时之间先返回旧数据、后台静默刷新。 */
 const HEAVY_STALE = 3600;
-async function swr(ctx, key, build) {
-  const hit = memCache.get(key);
-  const now = Date.now();
-  if (hit) {
-    const age = (now - hit.t) / 1000;
-    if (age < CACHE_TTL) return hit.data;
-    if (age < HEAVY_STALE && ctx && ctx.waitUntil) {
-      ctx.waitUntil(Promise.resolve().then(build)
-        .then((d) => { memCache.set(key, { data: d, t: Date.now() }); })
-        .catch(() => { /* 刷新失败继续用旧的 */ }));
-      return hit.data;
+function cKey(k) { return new Request("https://wool-cache.internal/" + k); }
+async function heavyGet(k) {
+  const m = memCache.get(k);
+  if (m && Date.now() - m.t < HEAVY_STALE * 1000) return m;
+  try {
+    const r = await caches.default.match(cKey(k));
+    if (r) {
+      const j = await r.json();
+      if (j && j.data) { memCache.set(k, j); return j; }
     }
-  }
-  const d = await build();
-  memCache.set(key, { data: d, t: now });
-  return d;
+  } catch (e) { /* L2 失效就当没有 */ }
+  return null;
+}
+async function heavySet(k, data) {
+  const j = { data, t: Date.now() };
+  memCache.set(k, j);
+  try {
+    await caches.default.put(cKey(k), new Response(JSON.stringify(j), { headers: { "cache-control": "public, max-age=" + HEAVY_STALE } }));
+  } catch (e) { /* 缓存失败不影响主流程 */ }
 }
 
 const rateMap = new Map();
@@ -577,16 +580,16 @@ export default {
         if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
         const kw = url.searchParams.get("q") || "";
         const key = "a:" + kw;
-        const hit = memCache.get(key);
+        const hit = await heavyGet(key);
         if (hit) {
           const age = (Date.now() - hit.t) / 1000;
           if (age < CACHE_TTL) return json(hit.data);
-          if (age < HEAVY_STALE && ctx && ctx.waitUntil) {
+          if (ctx && ctx.waitUntil) {
             // 过期但可用：先返回旧数据，后台重新核验
             ctx.waitUntil(Promise.resolve().then(async () => {
               const fresh = await hdkActivityList(env, 1, kw);
               await verifyActivities(env, fresh, 12);
-              memCache.set(key, { data: fresh, t: Date.now() });
+              await heavySet(key, fresh);
             }).catch(() => { /* 刷新失败继续用旧的 */ }));
             return json(hit.data);
           }
@@ -595,7 +598,7 @@ export default {
         const data = await hdkActivityList(env, 1, kw);
         data.forEach(a => { a.rebate = false; delete a.needAuth; });
         const done = verifyActivities(env, data, 12)
-          .then(() => { memCache.set(key, { data, t: Date.now() }); })
+          .then(() => heavySet(key, data))
           .catch(() => { /* 核验失败下次再试 */ });
         if (ctx && ctx.waitUntil) ctx.waitUntil(done); else await done;
         return json(data);
@@ -694,7 +697,20 @@ export default {
 
       /* ---- 本地生活：热门业务列表（美团走好单库，零第三方凭据）---- */
       if (url.pathname === "/api/life/business") {
-        const items = await swr(ctx, "life:biz2", () => lifeBusinessList(env));
+        const key = "life:biz2";
+        const hit = await heavyGet(key);
+        if (hit) {
+          const age = (Date.now() - hit.t) / 1000;
+          if (age < CACHE_TTL) return json({ configured: !!(hit.data && hit.data.length), items: hit.data || [] });
+          if (ctx && ctx.waitUntil) {
+            ctx.waitUntil(Promise.resolve().then(() => lifeBusinessList(env))
+              .then((d) => heavySet(key, d)).catch(() => { /* 刷新失败继续用旧的 */ }));
+            return json({ configured: !!(hit.data && hit.data.length), items: hit.data || [] });
+          }
+        }
+        const items = await lifeBusinessList(env);
+        const done = heavySet(key, items).catch(() => { /* ignore */ });
+        if (ctx && ctx.waitUntil) ctx.waitUntil(done); else await done;
         return json({ configured: !!(items && items.length), items: items || [] });
       }
 
