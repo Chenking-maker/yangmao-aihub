@@ -507,9 +507,22 @@ const server = createServer(async (req, res) => {
             cand.push({ id: a.activityId, item: normalizeLifeActivity(a) });
           });
         }
-        const probes = await Promise.all(cand.map((c) =>
-          hdkMeituanLink(env, c.id, 1).then((u) => (u ? c : null)).catch(() => null)));
-        probes.forEach((c) => { if (c) out.push(c.item); });
+        const probes = [];
+        const seenIdx = cand.slice(0, 14);
+        let pi = 0;
+        await Promise.all(Array.from({ length: Math.min(4, seenIdx.length) }, async () => {
+          while (pi < seenIdx.length) {
+            const c = seenIdx[pi++];
+            try {
+              const u = await Promise.race([
+                hdkMeituanLink(env, c.id, 1),
+                new Promise((_, rej) => setTimeout(() => rej(new Error("超时")), 6000))
+              ]);
+              if (u) out.push(c.item);
+            } catch (e) { /* 超时/失败都跳过 */ }
+          }
+        }));
+        void probes;
         const score = (i) => {
           const n = i.name || "";
           if (/闪购/.test(n)) return 2;

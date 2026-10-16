@@ -22,7 +22,7 @@
 
 import {
   normalizeList, hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
-  hdkActivityList, hdkConference, relayActivity, verifyActivities,
+  hdkActivityList, hdkConference, relayActivity, verifyActivities, withTimeout, pool,
   hdkWireCategories, hdkWireReport, hdkMaterialCommunities, hdkMaterialItems,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
   convertLink, proxyImage
@@ -381,12 +381,13 @@ async function lifeBusinessList(env) {
     });
   }
 
-  // 并行校验链接可用性：取不到链接的活动直接不展示，避免用户点了报错
-  var probes = await Promise.all(cand.map(function (c) {
-    return hdkMeituanLink(env, c.id, 1).then(function (u) { return u ? c : null; })
-      .catch(function () { return null; });
-  }));
-  probes.forEach(function (c) { if (c) out.push(c.item); });
+  // 限并发 + 超时校验：取不到链接的活动直接不展示，避免用户点了报错
+  await pool(cand.slice(0, 14), 4, async function (c) {
+    try {
+      const u = await withTimeout(hdkMeituanLink(env, c.id, 1), 6000, "life转链");
+      if (u) out.push(c.item);
+    } catch (e) { /* 超时/失败都跳过 */ }
+  });
 
   // 排序：外卖/吃喝玩乐/神券优先，闪购类最多 5 个 —— 避免整屏都是同一品牌的闪购专场
   function score(i) {
@@ -420,7 +421,7 @@ const SITE_URL = "https://chenking-maker.github.io/yangmao-aihub/";
 async function probe(name, fn) {
   const t0 = Date.now();
   try {
-    const r = await fn();
+    const r = await withTimeout(fn(), 10000, name);
     return { name, ok: r === true, ms: Date.now() - t0, detail: typeof r === "string" ? r : "" };
   } catch (e) {
     return { name, ok: false, ms: Date.now() - t0, detail: String(e.message || e).slice(0, 220) };

@@ -247,32 +247,45 @@ export async function relayActivity(env, opts) {
 /* 兼容旧调用名 */
 export const hdkConference = relayActivity;
 
+/* ---------- 小工具：并发池 + 超时包装 ---------- */
+export function withTimeout(p, ms, tag) {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise((_, rej) => setTimeout(() => rej(new Error((tag || "请求") + " 超时")), ms))
+  ]);
+}
+
+export async function pool(items, n, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) {
+      const k = i++;
+      try { await fn(items[k], k); } catch (e) { /* 单项失败不影响其余 */ }
+    }
+  }));
+}
+
 /**
  * 批量核验会场「是否真能生成带你自己推广标识的链接」，据此决定卡片上的「专属优惠」标 ——
  * 不能只看平台码猜（例如淘票票/淘宝闪购虽然平台码属阿里系，但活动物料不可转链）。
- * 并发 5 路探测，结果随 /api/activities 一起缓存。
+ * 并发 5 路 + 单项 6 秒超时，只核验实际展示的条目，结果随 /api/activities 缓存。
  */
 export async function verifyActivities(env, list, limit) {
-  var items = (list || []).slice(0, limit || 20);
-  var i = 0;
-  async function run() {
-    while (i < items.length) {
-      var a = items[i++];
-      if (!a.channel) { a.rebate = false; continue; }
-      try {
-        if (a.channel === "tb") {
-          a.rebate = !!(await tbConference(env, a.activityId, a.url, (a.name || "活动") + "会场入口领取"));
-        } else if (a.channel === "mt") {
-          a.rebate = !!(a.activityId && (await hdkMeituanLink(env, a.activityId, 1)));
-        } else if (a.channel === "jd") {
-          var r = await jdConference(env, a.url, a.name);
-          a.rebate = !!(r && r.url);
-          a.needAuth = !!(r && r.needAuth);
-        }
-      } catch (e) { a.rebate = false; }
-    }
-  }
-  await Promise.all([run(), run(), run(), run(), run()]);
+  var items = (list || []).slice(0, limit || 12);
+  await pool(items, 5, async function (a) {
+    if (!a.channel) { a.rebate = false; return; }
+    try {
+      if (a.channel === "tb") {
+        a.rebate = !!(await withTimeout(tbConference(env, a.activityId, a.url, (a.name || "活动") + "会场入口领取"), 6000, "tb转链"));
+      } else if (a.channel === "mt") {
+        a.rebate = !!(a.activityId && (await withTimeout(hdkMeituanLink(env, a.activityId, 1), 6000, "mt转链")));
+      } else if (a.channel === "jd") {
+        var r = await withTimeout(jdConference(env, a.url, a.name), 6000, "jd转链");
+        a.rebate = !!(r && r.url);
+        a.needAuth = !!(r && r.needAuth);
+      }
+    } catch (e) { a.rebate = false; }
+  });
   return list;
 }
 
