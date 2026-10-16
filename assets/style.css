@@ -1689,6 +1689,30 @@ body.has-page-side.ps-closed .side-toggle:hover { left: 0; }
 .star-go:hover { opacity: .88; }
 .star-drop:hover { color: var(--red); border-color: var(--red); background: var(--red-bg); }
 
+/* 星标 · 实时线报「完整快照」卡：一条线报占满一整行，直接看全文、逐行点开商品 */
+.star-card-wire { grid-column: 1 / -1; }
+.star-wtop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.star-wlines { display: flex; flex-direction: column; }
+.star-wline {
+  font-size: 12.5px; line-height: 1.78; color: var(--text);
+  white-space: pre-wrap; word-break: break-word;
+}
+.star-wfoot { margin: 4px 0 8px; }
+.star-wbtn {
+  padding: 4px 12px; border-radius: var(--r-sm); font-size: 12px; font-weight: 500;
+  background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border);
+  transition: background .15s, color .15s;
+}
+.star-wbtn:hover { background: var(--red); color: #fff; }
+.star-wbtn:disabled { opacity: .55; cursor: default; }
+.star-wimgs { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 4px; }
+.star-wimgs img {
+  width: 78px; height: 78px; object-fit: cover;
+  border-radius: var(--r-sm); border: 1px solid var(--hairline);
+  background: var(--img-ph);
+}
+.star-wnote { font-size: 11.5px; line-height: 1.65; color: var(--text-3); margin-top: 5px; }
+
 .star-sum {
   margin-top: 14px; padding: 16px 18px; border-radius: var(--r-md);
   background: linear-gradient(180deg, #fff8f7, var(--surface));

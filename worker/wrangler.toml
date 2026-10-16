@@ -33,18 +33,15 @@ LINK_DY = "https://z.douyin.com/JImh7NBm"
 JD_RED_WORD = "WFYsTBsVnM4UkQzm！"
 
 # ---- 京东联盟官方通道（自有账号直连 api.jd.com，彻底绕开好单库）----
-# 好消息：京东联盟的开放网关是公开的，拿到自己的 appKey/secretKey/siteId 就能
-# 转「任意」京东链接（商品页、会场、u.jd.com 短链都行），佣金 100% 归自己 ——
-# 也就是你在 union.jd.com/proManager/custompromotion 用的那个「万能转链」。
-# 获取方式（1 分钟，不用审核）：
-#   ① 打开 https://union.jd.com/myTools/myApi
-#   ② 复制 appKey / secretKey（有「网站/APP/导购媒体」推广位的话这里直接就有）
-#   ③ siteId = 该推广位的网站ID / APP ID / 导购媒体ID
-# 三个值配齐后，京东会场、京东实时线报里的商品链接全部自动转成你的推广链接。
-# JD_APP_SECRET 是密钥，建议用 wrangler secret put JD_APP_SECRET 配（不写进仓库）。
-JD_APP_KEY = ""
-JD_APP_SECRET = ""
-JD_SITE_ID = ""
+# 京东联盟的开放网关是公开的：用自己的 appKey / secretKey / siteId 就能转「任意」京东
+# 链接（商品页、会场、u.jd.com 短链都吃），佣金 100% 归自己 ——
+# 也就是 union.jd.com 里那个「万能转链」，只是现在由 Worker 自动完成，不用手动一条条转。
+# 三个值配齐后，京东会场、京东实时线报里点「转我的链接」全部走这条官方通道。
+# ⚠️ 本仓库是公开仓库（GitHub Pages 就是从它发布的），secretKey 绝不能写进这个文件，
+#    JD_APP_SECRET 请在 Cloudflare 后台配成 Secret —— 见文件末尾「密钥配置」。
+JD_APP_KEY = "8031b78d1ff40fdfc7986509d5fc2cd9"
+JD_SITE_ID = "4100978103"          # 导购媒体 ID
+# JD_APP_SECRET 不在此处写（见文末「密钥配置」）
 # 可选：子推广位（渠道标识，用来区分流量来源）
 JD_SUB_UNION_ID = "yangmao"
 # 可选：有的账号走 PID 而不是 siteId，填了就优先用
@@ -54,6 +51,16 @@ JD_ACCESS_TOKEN = ""
 # 省钱日报的微信推送通道：PushPlus（个人微信扫码免费拿 token，填到 PUSH_TOKEN）
 # 或企业微信群机器人 webhook（填到 WECOM_WEBHOOK）。两个都不填则只生成日报、不推送。
 # 注意：接口异常告警也支持走这两个通道（没配 SMTP 授权码时的兜底）。
+
+# ============================ 密钥配置（已配好在 Cloudflare 加密侧） ============================
+# 仓库是公开的，所以「密钥」一律不写进文件，只存在 Cloudflare 后台。需要更换时：
+#   ① 打开 https://dash.cloudflare.com → Workers & Pages → yangmao-aihub
+#   ② Settings（设置）→ Variables and Secrets（变量和密钥）→ Add
+#   ③ 类型选 **Secret**（不是 Text/Plaintext），名字必须完全一致：
+#        JD_APP_SECRET = 京东联盟应用的 secretKey（union.jd.com/myTools/myApi）
+#        SMTP_PASS     = QQ 邮箱授权码（mail.qq.com → 设置 → 账号 → 生成授权码，不是登录密码）
+#   ④ 保存即生效；以后每次 git push 构建都会自动继承，不需要重传。
+# 自检：访问 /api/health?deep=1，看「京东联盟官方转链」和「省钱日报 · 推送通道」两行状态。
 
 # 定时任务：
 #  ① 每天 08:00（北京时间）= 生成「省钱日报」并推送微信

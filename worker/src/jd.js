@@ -124,80 +124,140 @@ async function jdInvoke(env, method, biz, timeoutMs) {
     var raw = await res.text();
     var json = null;
     try { json = JSON.parse(raw); } catch (e) { json = null; }
-    if (!json) return { ok: false, code: "bad-json", desc: String(raw).slice(0, 160) };
+    if (!json) return { ok: false, code: "bad-json", desc: String(raw).slice(0, 200) };
 
-    var node = json[method.replace(/\./g, "_") + "_response"];
-    if (!node) node = json.error_response;
+    /* 京东网关的返回有三个坑，全踩过：
+     *   ① 结果字段拼写是 `xxx_responce`（少一个 s），不是标准的 `_response`；
+     *   ② 网关层 code=0 才算调用成功，真正的业务码被 JSON 字符串再包一层塞在 getResult 里；
+     *   ③ 另一部分接口又把结果放在 data 里。
+     *   （踩坑记录：只看 `_response` 会把明明有业务错误码的返回误判成 no-node，
+     *     于是一个真实错误被淹没成「未知错误」。） */
+    var base = method.replace(/\./g, "_");
+    var node = json[base + "_response"] || json[base + "_responce"] ||
+      json.error_response || json.error_responce || null;
     if (!node) {
-      for (var kk in json) { if (String(kk).indexOf("_response") > -1) { node = json[kk]; break; } }
+      for (var kk in json) {
+        if (/_resp(on)?ce$/.test(String(kk))) { node = json[kk]; break; }
+      }
     }
-    if (!node) return { ok: false, code: "no-node", desc: raw.slice(0, 160) };
+    if (!node) return { ok: false, code: "no-node", desc: raw.slice(0, 200) };
 
-    if (node.code && String(node.code) !== "200") {
-      return { ok: false, code: String(node.code), desc: String(node.zh_desc || node.en_desc || node.msg || "") };
+    var payload = null;
+    if (node.getResult !== undefined) payload = node.getResult;
+    else if (node.data !== undefined) payload = node.data;
+    if (typeof payload === "string") { try { payload = JSON.parse(payload); } catch (e) { payload = null; } }
+
+    /* 网关层失败（app_key 无效 / 签名错 / 方法名不存在）：没有业务体，看 node.code */
+    if (payload === null) {
+      if (node.code !== undefined && String(node.code) !== "0") {
+        return { ok: false, code: String(node.code), desc: String(node.zh_desc || node.en_desc || node.msg || "") };
+      }
+      return { ok: false, code: "no-payload", desc: raw.slice(0, 200) };
     }
-    var data = node.data;
-    if (typeof data === "string") { try { data = JSON.parse(data); } catch (e) { data = null; } }
-    if (!data) return { ok: false, code: "no-data", desc: raw.slice(0, 160) };
-    if (data.code && String(data.code) !== "200") {
-      return { ok: false, code: String(data.code), desc: String(data.message || data.msg || "") };
+    /* 业务层失败：业务码在 payload.code 里，1000+ 那串是京东联盟自己的错误码 */
+    if (payload.code !== undefined && String(payload.code) !== "200") {
+      return { ok: false, code: String(payload.code), desc: String(payload.message || payload.msg || "") };
     }
-    return { ok: true, data: data.data || data };
+    return { ok: true, data: payload.data || payload, raw: raw };
   } catch (e) {
     if (timer) clearTimeout(timer);
     return { ok: false, code: "network", desc: String((e && e.message) || e) };
   }
 }
 
+/* ---------- 错误码翻译 ----------
+ * 京东联盟的错误码不查文档根本看不懂，这里翻成人话 + 下一步该做什么。
+ * 常见三种：
+ *   403      该应用没开通「社交媒体转链」接口（bysubunionid.get）→ 联系联盟客服申请
+ *   2001701  传了「导购媒体ID」→ 这个接口只认网站ID/APP ID（接口明确禁止导购媒体入参）
+ *   1002024  siteId 为空
+ */
+var JD_HINT = {
+  "403": "该应用未开通「社交媒体转链」接口权限（jd.union.open.promotion.bysubunionid.get）。去 union.jd.com 联系联盟客服或发邮件 cps@jd.com 申请，开通后本通道自动生效，不用改代码",
+  "2001701": "转链接口禁止使用「导购媒体ID」，只认「网站ID / APP ID」（京东联盟 → 推广管理 → 网站管理 / APP管理 里查看），或改申请社交媒体转链接口权限",
+  "1002024": "siteId 不能为空：请在 Cloudflare 后台补上 JD_SITE_ID（网站ID 或 APP ID）",
+  "21": "appKey 无效或签名不通过（检查 JD_APP_KEY / JD_APP_SECRET 是否成对）",
+  "2001602": "账号未签署联盟协议或没有母账号权限",
+  "2001403": "无调用权限，请联系联盟运营申请"
+};
+function jdHint(code, desc) {
+  var k = String(code === undefined || code === null ? "" : code).trim();
+  var hit = JD_HINT[k] || JD_HINT[k.replace(/^0+(?=\d)/, "")];
+  if (hit) return hit;
+  return desc || ("京东返回 " + k);
+}
+/* 「软失败」= 配置或权限还没到位（不是服务挂了），不该触发告警轰炸，只提示一次。 */
+function jdSoft(code, desc) {
+  return /403|2001701|1002024|^21$|未配置|invalid app_key/i.test(String(code || "") + " " + String(desc || ""));
+}
+
 /* ---------- 万能转链 ----------
- * 京东联盟官方「万能转链」= jd.union.open.promotion.bysubunionid.get，
- * 传什么链接就转什么链接：商品详情页、活动会场、短链 u.jd.com 都吃。
- * 备选 jd.union.open.promotion.common.get（部分账号只开了这个）。
- * 返回 { url, shortUrl, channel, method } 或 null。 */
+ * 京东联盟官方「万能转链」：传什么链接就转什么链接 ——
+ * 商品详情页、活动会场、u.jd.com 短链都吃。佣金 100% 归自己。
+ * 两个候选接口，按权限情况自动挑：
+ *   ① jd.union.open.promotion.bysubunionid.get（社交媒体转链，用 subUnionId 标识渠道；需申请权限）
+ *   ② jd.union.open.promotion.common.get（通用转链，需网站ID/APP ID）
+ * 返回 { url, shortUrl, channel, method } 或 { error, soft }。
+ */
 export async function jdUniversal(env, materialUrl, opts) {
   opts = opts || {};
   if (!jdReady(env) || !materialUrl) return null;
 
-  var req = {
-    materialId: String(materialUrl),
-    siteId: String(env.JD_SITE_ID || ""),
-    positionId: Number(opts.positionId || 0),
-    subUnionId: String(env.JD_SUB_UNION_ID || "yangmao"),
-    pid: String(env.JD_PID || ""),
-    couponUrl: String(opts.couponUrl || ""),
-    chainType: Number(opts.chainType || 1)
-  };
+  function reqOf(chainType) {
+    return {
+      materialId: String(materialUrl),
+      siteId: String(env.JD_SITE_ID || ""),
+      positionId: Number(opts.positionId || 0),
+      subUnionId: String(env.JD_SUB_UNION_ID || "yangmao"),
+      pid: String(env.JD_PID || ""),
+      couponUrl: String(opts.couponUrl || ""),
+      chainType: Number(chainType || 1)
+    };
+  }
 
   var methods = ["jd.union.open.promotion.bysubunionid.get", "jd.union.open.promotion.common.get"];
-  var lastErr = "";
+  var lastErr = "", lastCode = "", soft = false;
+
   for (var i = 0; i < methods.length; i++) {
-    var r = await jdInvoke(env, methods[i], { promotionCodeReq: req }, opts.timeout || 8000);
-    if (r.ok) {
-      var d = r.data || {};
-      var url = d.shortURL || d.clickURL || d.shortUrl || d.clickUrl || "";
-      if (url) {
-        return {
-          url: url,
-          shortUrl: d.shortURL || d.shortUrl || "",
-          clickUrl: d.clickURL || d.clickUrl || "",
-          channel: "jd-api",
-          method: methods[i]
-        };
+    /* chainType：2=短链（微信里更好点开），失败降级 1=长链（长期有效） */
+    for (var c = 0; c < 2; c++) {
+      var r = await jdInvoke(env, methods[i], { promotionCodeReq: reqOf(c === 0 ? 2 : 1) }, opts.timeout || 8000);
+      if (r.ok) {
+        var d = r.data || {};
+        var url = d.shortURL || d.clickURL || d.shortUrl || d.clickUrl || "";
+        if (url) {
+          return {
+            url: url,
+            shortUrl: d.shortURL || d.shortUrl || "",
+            clickUrl: d.clickURL || d.clickUrl || "",
+            channel: "jd-api",
+            method: methods[i]
+          };
+        }
+        lastErr = "返回里没有推广链接：" + String(r.raw || "").slice(0, 160);
+        lastCode = "no-url";
+        break;   // 参数被接受了但没给链接，换方法名也没用，直接换下一个方法
       }
-      lastErr = "返回里没有推广链接";
-    } else {
-      lastErr = r.code + " " + r.desc;
-      /* 权限没申请 / appKey 无效这类硬错误，换方法名也没用，直接停 */
-      if (/Invalid app_key|21\b/.test(lastErr)) break;
+      lastErr = jdHint(r.code, r.desc);
+      lastCode = r.code;
+      soft = soft || jdSoft(r.code, r.desc);
+      /* 权限没开通 / appKey 无效 / siteId 不合法：换 chainType 重试也是同样结果 */
+      if (/403|2001701|1002024|^21$|Invalid app_key|no-node|bad-json/i.test(String(r.code))) break;
     }
   }
-  return { error: lastErr };
+  return { error: lastErr, code: lastCode, soft: soft };
 }
 
-/* 探针：给 /api/health 用，一眼看出京东官方通道通不通 */
+/* 探针：给 /api/health 用，一眼看出京东官方通道通不通、还差哪个值 */
 export async function jdProbe(env) {
-  if (!jdReady(env)) return { ok: false, reason: "未配置 JD_APP_KEY / JD_APP_SECRET / JD_SITE_ID" };
+  env = env || {};
+  var miss = [];
+  if (!env.JD_APP_KEY) miss.push("JD_APP_KEY");
+  if (!env.JD_APP_SECRET) miss.push("JD_APP_SECRET");
+  if (!env.JD_SITE_ID && !env.JD_PID) miss.push("JD_SITE_ID");
+  if (miss.length) return { ok: false, soft: true, reason: "未配置 " + miss.join(" / ") };
   var r = await jdUniversal(env, "https://item.jd.com/100012043978.html", { timeout: 6000 });
-  if (r && r.url) return { ok: true, url: r.url, channel: r.channel };
-  return { ok: false, reason: (r && r.error) || "未知错误" };
+  if (r && r.url) return { ok: true, url: r.url, channel: r.channel, method: r.method };
+  /* soft=true 表示「权限/参数没配好」而不是「服务挂了」——探针只提示，不告警 */
+  return { ok: false, soft: !!(r && r.soft), code: (r && r.code) || "", reason: (r && r.error) || "未知错误" };
 }

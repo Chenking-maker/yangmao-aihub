@@ -513,11 +513,20 @@ async function deepHealth(env) {
   items.push(await probe("京东联盟官方转链", async () => {
     const r = await jdProbe(env);
     if (!r.ok) {
-      /* 没配置不算故障（京东链接自动走好单库/固定链接兜底）；配了却转不动才是故障 */
-      if (/未配置/.test(r.reason)) return "未配置 JD_APP_KEY / JD_APP_SECRET / JD_SITE_ID（京东链接走兜底通道，不算故障）";
+      /* soft = 参数/权限没配好（未配置、未开通接口权限等）：只提示，不算故障，不告警；
+         真的调用报错（网络、签名被拒）才抛异常触发告警。 */
+      if (r.soft) return r.reason;
       throw new Error(r.reason);
     }
     return { ok: true, detail: r.url };
+  }));
+  items.push(await probe("省钱日报 · 推送通道", async () => {
+    const has = [];
+    if (env.PUSH_TOKEN) has.push("PushPlus 微信");
+    if (env.WECOM_WEBHOOK) has.push("企业微信机器人");
+    if (env.SMTP_PASS) has.push("QQ 邮件告警");
+    if (!has.length) return "未配置（日报只生成不推送；在 CF 后台加 PUSH_TOKEN 或 SMTP_PASS 即生效）";
+    return "已配置：" + has.join(" / ");
   }));
   return { ts: Date.now(), items };
 }

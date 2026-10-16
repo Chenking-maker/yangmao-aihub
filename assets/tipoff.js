@@ -1,11 +1,12 @@
-/* 羊毛AIHUB · 实时线报广场 v2.13
+/* 羊毛AIHUB · 实时线报广场 v2.15
  * 数据源：好单库线报接口（前端统一呈现为「AI 线报」）/ 素材圈子（宠物/美妆）
  *  ·
- *  ·  性能：每个分类「时间窗口 + 条数上限」双限（全部 12h/200 条，飞猪 7 天/100 条，
+ *  ·  性能：每个分类「时间窗口 + 条数上限」双限（全部 12h/50 条，飞猪 7 天/100 条，
  *  ·        百亿补贴·淘宝实时·京东实时 24h/200 条），分母可控；前端分批渲染 + 图片懒加载，
  *  ·        打开不再一次性灌几百张图，卡顿消失。
- *  ·  星标：整条线报一个星标（进「星标宝贝 · 实时线报」），线报里的每个商品链接单独一个星标
- *  ·        （进「星标宝贝 · 线报好物」，点开就能转链打开）。两者分开，互不拖累。
+ *  ·  星标：整条线报一个星标（进「星标宝贝 · 实时线报」，存的是**完整快照**：
+ *  ·        全文 + 图片 + 每行商品链接 —— 因为线报广场是流动的，过期就找不到原帖了；
+ *  ·        线报里的每个商品链接另有单独星标（进「星标宝贝 · 线报好物」）。
  */
 (function () {
   "use strict";
@@ -103,15 +104,34 @@
     return out;
   }
 
-  /* 整条线报 → 星标项（「实时线报」类，点开去线报广场） */
+  /* 整条线报 → 星标项。
+   * 关键：星标「整条线报」时把这条线报的内容整个存一份快照（全部文字行 + 图片 + 每行的商品链接），
+   * 因为线报广场是流动的 —— 12 小时后就滚出去了，原帖根本找不回来。
+   * 存全量后，星标宝贝里直接就是这条线报的完整原文，每行商品都还能点开转链。
+   * 体积控制：最多 30 行、每行 300 字、最多 3 张图（localStorage 有配额）。 */
+  var WIRE_SNAP_LINES = 30;
+  var WIRE_SNAP_CHARS = 300;
+  var WIRE_SNAP_IMGS = 3;
+
   function wireStarItem(it) {
     var text = wireText(it);
+    var lines = [];
+    (it.lines || []).forEach(function (l) {
+      if (lines.length >= WIRE_SNAP_LINES) return;
+      var t = String(l.text || "").trim();
+      var link = l.itemId || (t && hasLink(t) ? t : "");
+      if (!t && !link) return;
+      lines.push({ t: t.slice(0, WIRE_SNAP_CHARS), l: String(link || "") });
+    });
     return {
       k: "w:" + it.id,
       type: "wire",
-      title: text.slice(0, 160) || (it.platform + " · " + (it.time || "实时线报")),
+      title: text.slice(0, 240) || (it.platform + " · " + (it.time || "实时线报")),
+      lines: lines,
+      images: (it.images || []).slice(0, WIRE_SNAP_IMGS),
       pic: (it.images && it.images[0]) || "",
       platform: it.platform,
+      category: it.category || "",
       time: it.time || "",
       save: 0
     };

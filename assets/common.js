@@ -80,8 +80,20 @@
     return kept.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
   }
   function starSave(list) {
-    try { localStorage.setItem(STAR_KEY, JSON.stringify(list.slice(0, STAR_MAX))); } catch (e) { /* 空间满就放弃 */ }
-    try { window.dispatchEvent(new CustomEvent("wool:star", { detail: { count: list.length } })); } catch (e) { /* ignore */ }
+    /* 线报快照比普通宝贝大（整条文字 + 图片 + 商品链接），localStorage 写满时不能整批失败，
+       按「丢最旧的一半」逐步退让，保证最新那次收藏一定存得进去。 */
+    var arr = list.slice(0, STAR_MAX);
+    for (var i = 0; i < 5; i++) {
+      try { localStorage.setItem(STAR_KEY, JSON.stringify(arr)); break; }
+      catch (e) {
+        if (arr.length <= 1) {
+          try { localStorage.setItem(STAR_KEY, "[]"); } catch (e2) { /* ignore */ }
+          break;
+        }
+        arr = arr.slice(0, Math.max(1, Math.floor(arr.length / 2)));
+      }
+    }
+    try { window.dispatchEvent(new CustomEvent("wool:star", { detail: { count: arr.length } })); } catch (e) { /* ignore */ }
   }
   function starHas(k) {
     return starAll().some(function (x) { return x.k === k; });

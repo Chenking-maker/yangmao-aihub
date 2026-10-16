@@ -58,6 +58,9 @@ npx wrangler secret put LLM_API_KEY     # 硅基流动 API Key（AI 对话）
 npx wrangler secret put YZ_APP_KEY      # 云瞻平台 app_key（本地生活转链）
 npx wrangler secret put YZ_APP_SECRET   # 云瞻平台 app_secret
 npx wrangler secret put YZ_PROMOTION_ID # 云瞻推广位 ID
+
+npx wrangler secret put JD_APP_SECRET   # 京东联盟应用 secretKey（转链通道，2026-10 新增）
+npx wrangler secret put SMTP_PASS       # QQ 邮箱授权码（省钱日报 + 异常告警）
 ```
 
 **每个命令执行后会提示 `Enter a secret value:`**——此时打开项目里的 `tools/.env` 文件，把对应变量等号后面的值**复制、粘贴进去、回车**。粘贴时不会显示任何字符，是正常的（防窥屏）。
@@ -78,6 +81,16 @@ npx wrangler secret put YZ_PROMOTION_ID # 云瞻推广位 ID
 | SMTP_PASS | SMTP_PASS | QQ 邮箱**授权码**（不是登录密码！mail.qq.com → 设置 → 账号 → 开 SMTP → 生成授权码） |
 | ALERT_MAIL_TO | ALERT_MAIL_TO | 告警收件邮箱 |
 | ALERT_TOKEN | ALERT_TOKEN | 手动测试告警通道的令牌（访问 /api/alert/test?token=xxx） |
+| JD_APP_SECRET | 京东联盟 secretKey | 京东官方转链通道（配齐 JD_APP_KEY/JD_SITE_ID 后生效） |
+
+> **京东转链三个值**：`JD_APP_KEY` / `JD_SITE_ID` 写在 `wrangler.toml [vars]`（非机密），
+> `JD_APP_SECRET` 用上面的 secret put（机密）。三者齐了，京东会场和京东线报里的商品链接
+> 都会自动转成你自己的推广链接，佣金 100% 归自己。
+>
+> ⚠️ 注意：京东官方接口**不接受「导购媒体ID」**（会返回 2001701），要用「网站ID / APP ID」
+> （京东联盟 → 推广管理 → 网站管理 / APP管理）；或者申请「社交媒体转链」接口
+> `jd.union.open.promotion.bysubunionid.get` 的权限（申请通过后本通道自动生效）。
+> 访问 `/api/health?deep=1` 会直接告诉你差哪一个。
 
 > 后 3 个（YZ_*）等云瞻平台的 app_key/app_secret/推广位ID 拿到后再配；不配也不影响其他功能（本地生活走好单库美团）。
 >

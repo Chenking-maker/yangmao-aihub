@@ -1,6 +1,11 @@
-/* 羊毛AIHUB · 我的星标宝贝 v1.0
+/* 羊毛AIHUB · 我的星标宝贝 v2.15
  * 数据全部来自浏览器本地（common.js 的 WOOL.star*），不登录、不上传。
- * 功能：列表 / 勾选 / 一键统计一共能省多少 / 删除选中 / 清空 / 30 天自动过期
+ * 功能：分类筛选 / 勾选 / 一键统计一共能省多少 / 删除选中 / 清空 / 30 天自动过期
+ *
+ * v2.15 重点：星标「实时线报」时存的是这条线报的**完整快照**（全部文字行 + 图片 +
+ * 每一行的商品链接）。线报广场是流动的，12 小时后就滚出去了、原帖再也找不回来 ——
+ * 所以星标页里直接看到全文，每个商品行都能点「获取购买链接」当场转链打开，
+ * 不用（也不该）再回线报广场去碰运气。
  */
 (function () {
   "use strict";
@@ -43,110 +48,217 @@
   function strip(s) {
     return String(s || "").replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
   }
+  function pfClass(pf) {
+    if (pf === "京东") return "jd";
+    if (pf === "飞猪") return "fz";
+    if (pf === "淘宝" || pf === "天猫") return "tm";
+    return "";
+  }
+  function picUrl(u) {
+    return W.API_BASE + "/api/img?u=" + encodeURIComponent(u);
+  }
 
-  /* ---------- 单个宝贝卡 ---------- */
+  /* ---------- 转链并打开 ----------
+   * 转链是异步的（几百毫秒到几秒），必须先把窗口同步开出来再填地址，
+   * 否则浏览器会把 window.open 当弹窗拦掉，用户点了像没反应一样。 */
+  function convertOpen(link, opts) {
+    opts = opts || {};
+    var fallback = String(link || "");
+    if (!fallback) { W.toast("这条没有可打开的链接"); return; }
+
+    var pre = null;
+    try { pre = window.open("about:blank", "_blank"); } catch (e) { pre = null; }
+    if (pre) {
+      try {
+        pre.document.write('<title>正在获取…</title><div style="font-family:-apple-system,\'PingFang SC\',sans-serif;padding:44px;text-align:center;color:#555;font-size:15px">正在获取你的专属优惠链接…</div>');
+      } catch (e) { /* ignore */ }
+    }
+    function land(url) {
+      if (pre && !pre.closed) { try { pre.opener = null; } catch (e) { /* ignore */ } pre.location.href = url; }
+      else window.open(url, "_blank", "noopener");
+    }
+    function giveUp() { if (pre && !pre.closed) try { pre.close(); } catch (e) { /* ignore */ } }
+
+    W.toast("正在获取你的专属链接…");
+    W.apiPost("/api/convert", { text: fallback }).then(function (r) {
+      var url = (r && r.url) || "";
+      if (!url && /^https?:\/\//.test(fallback)) url = fallback;   // 转不了就打开原链接，保证点得开
+      if (url) {
+        W.logSave({ k: opts.k || "", title: opts.title || "", save: opts.save });
+        if (opts.item) {   // 顺手把转好的链接缓存进星标，下次点就是秒开
+          var list = W.starList();
+          for (var i = 0; i < list.length; i++) if (list[i].k === opts.item.k) { list[i].url = url; break; }
+          try { localStorage.setItem("ck_star_items", JSON.stringify(list)); } catch (e) { /* ignore */ }
+        }
+        land(url);
+        W.toast(r && r.converted === false ? "已为你打开原链接（这条暂时转不了返利）" : "已打开你的专属优惠链接");
+      } else if (r && r.taoCode) {
+        giveUp();
+        W.copyText(r.taoCode, "淘口令已复制，打开淘宝自动识别");
+      } else {
+        giveUp();
+        W.toast((r && (r.note || r.error)) || "没取到链接，稍后再试");
+      }
+    }).catch(function () {
+      giveUp();
+      W.toast("网络开小差了，再试一次");
+    });
+  }
+
+  /* ---------- 卡片公共交互：勾选 / 移除 ---------- */
+  function bindCard(el, it) {
+    el.querySelector("input").addEventListener("change", function (e) {
+      if (e.target.checked) picked[it.k] = true; else delete picked[it.k];
+      el.classList.toggle("pick", !!picked[it.k]);
+      paintSel();
+    });
+    var drop = el.querySelector(".js-drop");
+    if (drop) drop.addEventListener("click", function () {
+      W.starRemove(it.k);
+      delete picked[it.k];
+      W.toast("已移出星标宝贝");
+      render();
+    });
+  }
+
+  /* ---------- 完整线报卡（实时线报） ---------- */
+  function wireTextOf(it) {
+    var out = ["【" + (it.platform || "线报") + (it.time ? " · " + it.time : "") + "】"];
+    var lines = Array.isArray(it.lines) ? it.lines : [];
+    if (lines.length) {
+      lines.forEach(function (ln) {
+        var t = String(ln.t || "");
+        if (t) out.push(t);
+        else if (ln.l) out.push(String(ln.l));
+      });
+    } else {
+      out.push(String(it.title || ""));
+    }
+    return out.join("\n");
+  }
+
+  function wireCard(it) {
+    var el = document.createElement("div");
+    el.className = "star-card star-card-wire" + (picked[it.k] ? " pick" : "");
+    el.setAttribute("data-k", it.k);
+
+    var lines = Array.isArray(it.lines) ? it.lines : [];
+    var legacy = !lines.length;      // v2.15 之前的旧收藏：只存了文字标题，没有商品链接
+    var rows = "";
+    lines.forEach(function (ln) {
+      var t = String(ln.t || "");
+      var l = String(ln.l || "");
+      if (t) rows += '<div class="star-wline">' + W.esc(t) + "</div>";
+      if (l) {
+        rows += '<div class="star-wfoot"><button class="star-wbtn" data-t="' +
+          W.esc(encodeURIComponent(l)) + '">🛒 获取购买链接</button></div>';
+      }
+    });
+
+    var imgs = (it.images && it.images.length)
+      ? '<div class="star-wimgs">' + it.images.map(function (u) {
+          return '<img loading="lazy" decoding="async" src="' + picUrl(u) + '" referrerpolicy="no-referrer" alt="">';
+        }).join("") + "</div>"
+      : "";
+
+    el.innerHTML =
+      '<label class="star-pick"><input type="checkbox" ' + (picked[it.k] ? "checked" : "") + "></label>" +
+      '<div class="star-body">' +
+        '<div class="star-wtop">' +
+          '<span class="wire-pf ' + pfClass(it.platform) + '">' + W.esc(it.platform || "线报") + "</span>" +
+          (it.category ? '<span class="wire-cate">' + W.esc(it.category) + "</span>" : "") +
+          (it.time ? '<span class="wire-time">' + W.esc(it.time) + "</span>" : "") +
+        "</div>" +
+        (legacy
+          ? '<div class="star-wline">' + W.esc(it.title || "") + "</div>" +
+            '<div class="star-wnote">这条是旧版收藏（当时只存了文字，没存商品链接）。点右侧「回线报广场」试着重找；新版收藏会把整条线报连商品链接一起完整存下来。</div>'
+          : '<div class="star-wlines">' + rows + "</div>") +
+        imgs +
+        '<div class="star-meta">' +
+          '<span class="star-type">📡 实时线报</span>' +
+          '<span class="star-time">' + ago(it.ts) + " 收藏 · 还剩 " + daysLeft(it.ts) + " 天</span>" +
+          (legacy ? "" : '<span class="star-time">' + lines.length + " 行 · 已存完整快照</span>") +
+        "</div>" +
+      "</div>" +
+      '<div class="star-acts">' +
+        (legacy ? '<button class="star-go js-square">回线报广场</button>' : "") +
+        '<button class="star-drop js-copyall">复制全文</button>' +
+        '<button class="star-drop js-drop">移除</button>' +
+      "</div>";
+
+    bindCard(el, it);
+
+    var sq = el.querySelector(".js-square");
+    if (sq) sq.addEventListener("click", function () {
+      window.open("tipoff.html", "_blank", "noopener");
+      W.toast("已打开线报广场，帮你找回这条线报");
+    });
+
+    el.querySelector(".js-copyall").addEventListener("click", function () {
+      W.copyText(wireTextOf(it), "线报全文已复制");
+    });
+
+    el.querySelectorAll(".star-wbtn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var t = decodeURIComponent(btn.getAttribute("data-t") || "");
+        var old = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "获取中…";
+        setTimeout(function () { btn.disabled = false; btn.textContent = old; }, 5000);
+        convertOpen(t, { k: it.k, title: it.title, save: it.save });
+      });
+    });
+
+    return el;
+  }
+
+  /* ---------- 普通宝贝卡（好价商品 / 线报好物 / 红包会场 / 本地生活） ---------- */
   function starCard(it) {
     var el = document.createElement("div");
     el.className = "star-card" + (picked[it.k] ? " pick" : "");
     el.setAttribute("data-k", it.k);
 
     var pic = it.pic
-      ? '<img loading="lazy" src="' + W.API_BASE + '/api/img?u=' + encodeURIComponent(it.pic) + '" referrerpolicy="no-referrer" alt="">'
-      : '<span class="star-ph">' + (TYPE_ICO[it.type] || "⭐") + '</span>';
+      ? '<img loading="lazy" src="' + picUrl(it.pic) + '" referrerpolicy="no-referrer" alt="">'
+      : '<span class="star-ph">' + (TYPE_ICO[it.type] || "⭐") + "</span>";
 
     var priceRow = (Number(it.price) > 0 || Number(it.endPrice) > 0)
       ? '<div class="star-price">' +
-          (it.endPrice ? '<span class="now">¥' + it.endPrice + '</span>' : "") +
-          (Number(it.price) > 0 && String(it.price) !== String(it.endPrice) ? '<span class="old">¥' + it.price + '</span>' : "") +
-          (it.save > 0 ? '<span class="save">省 ¥' + it.save + '</span>' : "") +
-        '</div>'
+          (it.endPrice ? '<span class="now">' + it.endPrice + "</span>" : "") +
+          (Number(it.price) > 0 && String(it.price) !== String(it.endPrice) ? '<span class="old">' + it.price + "</span>" : "") +
+          (it.save > 0 ? '<span class="save">省 ¥' + it.save + "</span>" : "") +
+        "</div>"
       : "";
 
-    var isWireish = (it.type === "wire" || it.type === "wirelink");
+    var isWireish = (it.type === "wirelink");
     var full = strip(it.title);
-    var head = isWireish ? full.slice(0, 56) : String(it.title || "").slice(0, 60);
-    var tail = isWireish ? full.slice(56, 170) : "";
+    var head = isWireish && full.length > 60 ? full.slice(0, 60) : String(it.title || "").slice(0, 80);
+    var tail = isWireish ? full.slice(60, 180) : "";
     var body = isWireish
-      ? (tail ? '<div class="star-desc">' + W.esc(tail) + '</div>' : "")
-      : (it.shop ? '<div class="star-shop">' + W.esc(it.shop) + '</div>' : "");
+      ? (tail ? '<div class="star-desc">' + W.esc(tail) + "</div>" : "")
+      : (it.shop ? '<div class="star-shop">' + W.esc(it.shop) + "</div>" : "");
 
-    /* 打开按钮文案要区分：好价商品/线报好物=可直接打开；整条线报=跳线报广场 */
-    var goLabel = it.type === "wire" ? "去线报广场" : (it.type === "wirelink" ? "转链打开" : "打开");
+    var goLabel = it.type === "wirelink" ? "转链打开" : "打开";
 
     el.innerHTML =
-      '<label class="star-pick"><input type="checkbox" ' + (picked[it.k] ? "checked" : "") + '></label>' +
-      '<div class="star-thumb">' + pic + '</div>' +
+      '<label class="star-pick"><input type="checkbox" ' + (picked[it.k] ? "checked" : "") + "></label>" +
+      '<div class="star-thumb">' + pic + "</div>" +
       '<div class="star-body">' +
-        '<div class="star-title">' + W.esc(head) + '</div>' +
+        '<div class="star-title">' + W.esc(head) + "</div>" +
         body + priceRow +
         '<div class="star-meta">' +
-          '<span class="star-type">' + (TYPE_ICO[it.type] || "⭐") + " " + (TYPE_NAME[it.type] || "收藏") + '</span>' +
-          '<span class="star-time">' + ago(it.ts) + ' 收藏 · 还剩 ' + daysLeft(it.ts) + ' 天</span>' +
-        '</div>' +
-      '</div>' +
+          '<span class="star-type">' + (TYPE_ICO[it.type] || "⭐") + " " + (TYPE_NAME[it.type] || "收藏") + "</span>" +
+          '<span class="star-time">' + ago(it.ts) + " 收藏 · 还剩 " + daysLeft(it.ts) + " 天</span>" +
+        "</div>" +
+      "</div>" +
       '<div class="star-acts">' +
-        '<button class="star-go">' + goLabel + '</button>' +
-        '<button class="star-drop">移除</button>' +
-      '</div>';
+        '<button class="star-go">' + goLabel + "</button>" +
+        '<button class="star-drop js-drop">移除</button>' +
+      "</div>";
 
-    el.querySelector("input").addEventListener("change", function (e) {
-      if (e.target.checked) picked[it.k] = true; else delete picked[it.k];
-      el.classList.toggle("pick", !!picked[it.k]);
-      paintSel();
-    });
+    bindCard(el, it);
     el.querySelector(".star-go").addEventListener("click", function () { openItem(it); });
-    el.querySelector(".star-drop").addEventListener("click", function () {
-      W.starRemove(it.k);
-      delete picked[it.k];
-      W.toast("已移出星标宝贝");
-      render();
-    });
     return el;
-  }
-
-  /* 线报好物：先同步占位开窗（不然转链是异步的，浏览器会当弹窗拦掉），拿到链接再填进去 */
-  function openWireLink(it) {
-    var fallback = String(it.link || "");
-    if (it.url) {
-      W.logSave({ k: it.k, title: it.title, save: it.save });
-      window.open(it.url, "_blank", "noopener");
-      return;
-    }
-    if (!fallback) { W.toast("这条没有可打开的链接，去线报广场看看同款"); return; }
-
-    var pre = null;
-    try { pre = window.open("about:blank", "_blank"); } catch (e) { pre = null; }
-    if (pre) {
-      try { pre.document.write('<title>正在获取…</title><div style="font-family:-apple-system,\'PingFang SC\',sans-serif;padding:44px;text-align:center;color:#555;font-size:15px">正在获取你的专属优惠链接…</div>'); } catch (e) { /* ignore */ }
-    }
-    function land(url) {
-      if (pre && !pre.closed) { try { pre.opener = null; } catch (e) { /* ignore */ } pre.location.href = url; }
-      else window.open(url, "_blank", "noopener");
-    }
-    W.toast("正在获取你的专属链接…");
-    W.apiPost("/api/convert", { text: fallback }).then(function (r) {
-      var url = (r && r.url) || "";
-      if (!url && /^https?:\/\//.test(fallback)) url = fallback;      // 转不了就打开原链接，保证点得开
-      if (url) {
-        W.logSave({ k: it.k, title: it.title, save: it.save });
-        var list = W.starList();
-        for (var i = 0; i < list.length; i++) {
-          if (list[i].k === it.k) { list[i].url = url; break; }
-        }
-        try { localStorage.setItem("ck_star_items", JSON.stringify(list)); } catch (e) { /* ignore */ }
-        land(url);
-        W.toast(r && r.converted === false ? "已为你打开原链接（这条暂时转不了返利）" : "已打开你的专属优惠链接");
-      } else if (r && r.taoCode) {
-        if (pre && !pre.closed) try { pre.close(); } catch (e) { /* ignore */ }
-        W.copyText(r.taoCode, "淘口令已复制，打开淘宝自动识别");
-      } else {
-        if (pre && !pre.closed) try { pre.close(); } catch (e) { /* ignore */ }
-        W.toast((r && (r.note || r.error)) || "没取到链接，稍后再试");
-      }
-    }).catch(function () {
-      if (pre && !pre.closed) try { pre.close(); } catch (e) { /* ignore */ }
-      W.toast("网络开小差了，再试一次");
-    });
   }
 
   function openItem(it) {
@@ -156,9 +268,13 @@
       W.openCoupon({ id: it.itemId, title: it.title, couponurl: it.url, price: it.price, endPrice: it.endPrice, coupon: it.coupon });
       return;
     }
-    if (it.type === "wirelink") { openWireLink(it); return; }
+    if (it.type === "wirelink") { convertOpen(it.link, { k: it.k, title: it.title, save: it.save, item: it }); return; }
     if (it.type === "wire") {
-      /* 整条线报只是个备忘（一条线报可能含多个商品链接），打开去线报广场找同款 */
+      /* 新版星标存了完整快照，全文就在卡片上；只有旧数据才需要回线报广场 */
+      if (Array.isArray(it.lines) && it.lines.length) {
+        W.toast("这条线报的完整内容就在卡片里，点「获取购买链接」即可打开商品");
+        return;
+      }
       window.open("tipoff.html", "_blank", "noopener");
       W.toast("已打开线报广场，帮你找回这条线报");
       return;
@@ -207,17 +323,17 @@
 
     sumBox.hidden = false;
     sumBox.innerHTML =
-      '<div class="sum-head">📊 这 ' + list.length + ' 件宝贝的省钱账</div>' +
+      '<div class="sum-head">📊 这 ' + list.length + " 件宝贝的省钱账</div>" +
       '<div class="sum-grid">' +
-        '<div class="sum-cell"><b>¥' + sumOld.toFixed(1) + '</b><span>全部原价</span></div>' +
-        '<div class="sum-cell"><b>¥' + sumNew.toFixed(1) + '</b><span>券后总价</span></div>' +
-        '<div class="sum-cell hi"><b>¥' + save.toFixed(1) + '</b><span>一共能省</span></div>' +
-        '<div class="sum-cell"><b>' + off + '%</b><span>平均折扣</span></div>' +
-      '</div>' +
+        '<div class="sum-cell"><b>¥' + sumOld.toFixed(1) + "</b><span>全部原价</span></div>" +
+        '<div class="sum-cell"><b>¥' + sumNew.toFixed(1) + "</b><span>券后总价</span></div>" +
+        '<div class="sum-cell hi"><b>¥' + save.toFixed(1) + "</b><span>一共能省</span></div>" +
+        '<div class="sum-cell"><b>' + off + "%</b><span>平均折扣</span></div>" +
+      "</div>" +
       '<div class="sum-note">' +
         Object.keys(byType).map(function (t) { return (TYPE_NAME[t] || t) + " " + byType[t] + " 件"; }).join(" · ") +
-        (priced.length < list.length ? '<br>（其中 ' + (list.length - priced.length) + ' 件是线报/会场，没有标价，未计入金额）' : "") +
-      '</div>';
+        (priced.length < list.length ? "<br>（其中 " + (list.length - priced.length) + " 件是线报/会场，没有标价，未计入金额）" : "") +
+      "</div>";
     W.logSave({ k: "sum", title: "星标统计", save: save });
     sumBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
@@ -283,7 +399,7 @@
             '<a class="star-empty-btn" href="tipoff.html">去线报广场 ›</a>' +
             '<a class="star-empty-btn ghost" href="index.html#feed">去好价榜 ›</a>' +
           '</div>' +
-        '</div>';
+        "</div>";
       paintSel();
       return;
     }
@@ -293,12 +409,14 @@
           '<div class="star-empty-ico">🗂️</div>' +
           '<div class="star-empty-t">这个分类下还没有收藏</div>' +
           '<div class="star-empty-s">点上面的「全部」看看其它宝贝。</div>' +
-        '</div>';
+        "</div>";
       paintSel();
       return;
     }
     grid.innerHTML = "";
-    list.forEach(function (it) { grid.appendChild(starCard(it)); });
+    list.forEach(function (it) {
+      grid.appendChild(it.type === "wire" ? wireCard(it) : starCard(it));
+    });
     paintSel();
   }
 
