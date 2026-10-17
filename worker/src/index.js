@@ -589,6 +589,14 @@ async function warmup(env) {
   try {
     await heavySet("wn:list:0::飞猪旅行:168:100", await hdkWireReportRecent("0", 168, 100, 25000, "飞猪旅行"));
   } catch (e) { /* ignore */ }
+  /* 其余三个实时分类也预热：首次点进对应 tab 同样是热缓存 */
+  var wireTabs = [["10003", 24, 200], ["10004", 24, 200], ["10005", 24, 200]];
+  for (var wi = 0; wi < wireTabs.length; wi++) {
+    try {
+      await heavySet("wn:list:0::" + wireTabs[wi][0] + ":" + wireTabs[wi][1] + ":" + wireTabs[wi][2],
+        await hdkWireReportRecent(wireTabs[wi][0], wireTabs[wi][1], wireTabs[wi][2], 15000));
+    } catch (e) { /* ignore */ }
+  }
 }
 
 async function scheduledHealth(env) {

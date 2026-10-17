@@ -81,7 +81,7 @@ npx wrangler deploy
 
 ### 7. 拿到 Worker 网址并填进前端
 - `wrangler deploy` 成功后，会打印一个网址，类似：
-  **`https://wool-ai-api.<你的子域>.workers.dev`**
+  **`https://yangmao-aihub.370542303.workers.dev`**
 - 打开 `assets/common.js`，搜索 `wool-ai-api.workers.dev`，把它换成上面打印的真实网址，保存。
 
 ### 8. 重新推送前端（让改动生效）

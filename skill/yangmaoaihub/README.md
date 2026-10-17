@@ -34,8 +34,9 @@
 ## 部署者说明（站长）
 
 - Skill 的所有数据请求走羊毛AIHUB 的 API（Cloudflare Worker）。部署方法见仓库根目录 `DEPLOY.md`。
-- 接口基地址在 `SKILL.md` 顶部 `API_BASE` 处配置（默认 `https://wool-ai-api.workers.dev`，部署 Worker 后替换为你的真实地址）。
-- 线报源与转链能力由 Worker 提供：`/api/wire`、`/api/convert`、`/api/search`、`/api/xhd`、`/api/activities`。
+- 接口基地址在 `SKILL.md` 顶部 `API_BASE` 处配置（当前 `https://yangmao-aihub.370542303.workers.dev`，Worker 域名变更时才需要改）。
+- 线报源与转链能力由 Worker 提供：`/api/wire`、`/api/convert`、`/api/parse`、`/api/search`、`/api/xhd`、`/api/activities`、`/api/links`、`/api/life/*`。
+- 推送默认**不逐条转链**（几十条要等几分钟）；只在用户明确要求或直接发链接时才转 —— 同一链接二次转链有缓存，毫秒级返回。
 
 ## 目录结构
 

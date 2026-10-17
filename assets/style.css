@@ -1898,3 +1898,10 @@ body.has-page-side.ps-closed .side-toggle:hover { left: 0; }
   .star-card { flex-wrap: wrap; }
   .star-acts { flex-direction: row; width: 100%; }
 }
+
+
+/* 窄屏补丁（必须放在文件末尾：基础规则在后面会覆盖前面的 media query） */
+@media (max-width: 720px) {
+  /* 淘金币三步卡：三列网格被 min-width:150px 撑破导致横向溢出，窄屏改单列 */
+  .coin-steps-page { grid-template-columns: 1fr; }
+}

@@ -128,9 +128,9 @@ Published yangmao-aihub (0.85 sec)
 1. 用编辑器打开 `assets/common.js`
 2. 找到这一行（文件开头附近）：
    ```js
-   : "https://wool-ai-api.workers.dev"; // TODO: Worker 部署后替换为真实域名
+   : "https://yangmao-aihub.370542303.workers.dev"; // TODO: Worker 部署后替换为真实域名
    ```
-3. 把 `https://wool-ai-api.workers.dev` 换成第 4 步复制的真实网址，保存
+3. 把 `https://yangmao-aihub.370542303.workers.dev` 换成第 4 步复制的真实网址，保存
 4. 提交并推送：
    ```bash
    cd /d/Workbuddy/羊毛网站
