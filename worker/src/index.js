@@ -25,7 +25,7 @@ import {
   hdkActivityList, hdkConference, relayActivity, verifyActivities, withTimeout, pool,
   hdkWireCategories, hdkWireReport, hdkWireReportRecent, hdkMaterialCommunities, hdkMaterialItems,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
-  convertLink, proxyImage, dailyStats, bjDate, fixedLinks
+  convertLink, proxyImage, dailyStats, bjDate, fixedLinks, extractLinkMaterial
 } from "./core.js";
 import { jdProbe } from "./jd.js";
 import { yzLifeBusinesses, yzPromotionLink } from "./yunzhan.js";
@@ -584,6 +584,11 @@ async function warmup(env) {
   try {
     await heavySet("wn:list:0::12:50", await hdkWireReportRecent("0", 12, 50, 6000));
   } catch (e) { /* ignore */ }
+  /* 飞猪旅行：分类专查接口索引滞后（慢 3 天），改从全量流筛，条目稀疏要翻更深，
+     所以单独预热，否则前台几秒预算只能捞到一两条 */
+  try {
+    await heavySet("wn:list:0::飞猪旅行:168:100", await hdkWireReportRecent("0", 168, 100, 25000, "飞猪旅行"));
+  } catch (e) { /* ignore */ }
 }
 
 async function scheduledHealth(env) {
@@ -708,7 +713,9 @@ export default {
         const rawHours = url.searchParams.get("hours");
         const hours = Number(rawHours === null ? 12 : rawHours);
         const max = Math.min(Math.max(Number(url.searchParams.get("max")) || 200, 20), 300);
-        const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + hours + ":" + max;
+        /* cate：按中文分类从全量流里筛（分类专查接口索引滞后，见 core.js 注释） */
+        const cate = (url.searchParams.get("cate") || "").slice(0, 20);
+        const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + cate + ":" + hours + ":" + max;
 
         /* 翻页拉线报要打很多次上游，而 Cloudflare 边缘到好单库一次就可能要好几秒，
            所以这里最看重「秒回」：只要缓存里还有东西，哪怕旧了也先发给用户，
@@ -719,7 +726,7 @@ export default {
           else if (sub === "list") {
             const type = url.searchParams.get("type") || "0";
             data = hours > 0
-              ? await hdkWireReportRecent(type, hours, max, budget)
+              ? await hdkWireReportRecent(type, hours, max, budget, cate)
               : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
           } else if (sub === "material") {
             const tag = url.searchParams.get("tag") || "宠物";
@@ -749,8 +756,9 @@ export default {
         }
 
         /* 真没缓存：前台只等 WIRE_BUDGET，超了就先把当前这批发出去，
-           后台再补一次「抓满」的（下一次访客就是全量了） */
-        const data = await build(WIRE_BUDGET);
+           后台再补一次「抓满」的（下一次访客就是全量了）。
+           稀疏分类（飞猪，从全量流里筛）多给一倍预算，否则只能捞到一两条。 */
+        const data = await build(cate ? WIRE_BUDGET * 2 : WIRE_BUDGET);
         if (ctx && ctx.waitUntil) {
           ctx.waitUntil(Promise.resolve().then(() => build(20000)).then(d => heavySet(key, d)).catch(() => { /* ignore */ }));
         } else {
@@ -784,8 +792,22 @@ export default {
         const body = await request.json().catch(() => ({}));
         const text = String(body.text || "").slice(0, 500);
         if (!text) return json({ error: "缺少 text 参数" }, 400);
+        /* 转链结果缓存：同一商品（或同一条口令）转出来的推广链接是固定的，
+         * 而 Cloudflare 边缘到好单库单次要好几秒 —— 不缓存的话，
+         * 同一条线报每次点「转我的链接」都要重等一遍。缓存后第二次起毫秒级返回。
+         * TTL 沿用 heavyGet/heavySet：10 分钟新鲜、1 小时内过期先回旧值后台换新。 */
+        const mat = extractLinkMaterial(text);
+        const cvKey = mat && mat.materialId ? "cv:" + mat.kind + ":" + String(mat.materialId).slice(0, 90) : "";
+        if (cvKey) {
+          const cvHit = await heavyGet(cvKey);
+          if (cvHit && cvHit.data) return json(cvHit.data);
+        }
         const r = await convertLink(env, text);
         if (!r) return json({ error: "没识别出可转链的链接，把商品链接再发我一次试试" }, 400);
+        if (cvKey && r) {
+          if (ctx && ctx.waitUntil) ctx.waitUntil(Promise.resolve(heavySet(cvKey, r)).catch(() => { /* ignore */ }));
+          else await heavySet(cvKey, r).catch(() => { /* ignore */ });
+        }
         return json(r);
       }
 

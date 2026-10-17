@@ -221,6 +221,28 @@
         W.copyText(L.jdRedWord, "口令已复制，打开京东 APP 搜索即可领红包");
       });
     }
+    /* 京东领券中心 / 外卖专场：配了固定推广链接才显示（密令写进文案，扫码搜得到） */
+    if (L && (L.jdCoupon || L.jdWm)) {
+      var host = document.querySelector("#redpacket");
+      var wide = host && host.querySelector(".rp-wide");
+      var extras = [
+        L.jdWm && { url: L.jdWm, ico: "🛵", title: "京东外卖专场", copy: "京东搜密令「餐补来了5930」，外卖餐补天天领，点外卖前先领券。" },
+        L.jdCoupon && { url: L.jdCoupon, ico: "🎫", title: "京东领券中心", copy: "京东搜密令「领券加码1050」，全品类券加码领取，买啥都能省一点。" }
+      ].filter(Boolean);
+      extras.forEach(function (x) {
+        var a = document.createElement("a");
+        a.className = "rp-wide";
+        a.href = x.url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.innerHTML = '<span class="rp-wide-ico">' + x.ico + '</span>' +
+          '<span class="rp-wide-body"><span class="rp-wide-title">' + x.title + '</span>' +
+          '<span class="rp-wide-copy">' + x.copy + '</span></span>' +
+          '<span class="rp-wide-btn">去领取 ›</span>';
+        if (wide) wide.parentNode.insertBefore(a, wide.nextSibling);
+        else host.appendChild(a);
+      });
+    }
   }).catch(function () { /* 没配就算了，走默认通道 */ });
 
   function bindJdBtn(fallbackActivity) {

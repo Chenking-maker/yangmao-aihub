@@ -21,7 +21,7 @@
   /* 每个分类的窗口：hours=时间窗口（小时），max=最多保留条数 */
   var TABS = [
     { key: "all", label: "全部", icon: "🧩", src: "wire", q: "0", hours: 12, max: 50 },
-    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "10367", hours: 168, max: 100 },
+    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "0", cate: "飞猪旅行", hours: 168, max: 100 },
     { key: "by", label: "淘宝百亿补贴", icon: "🛒", src: "wire", q: "10005", hours: 24, max: 200 },
     { key: "tb", label: "淘宝实时线报", icon: "📦", src: "wire", q: "10003", hours: 24, max: 200 },
     { key: "jd", label: "京东实时线报", icon: "🏷️", src: "wire", q: "10004", hours: 24, max: 200 },
@@ -47,6 +47,7 @@
       tabsEl.querySelectorAll(".wire-tab").forEach(function (x) { x.classList.remove("active"); });
       b.classList.add("active");
       current = t.key;
+      paintTip(t);
       loadList(t);
     });
     tabsEl.appendChild(b);
@@ -357,7 +358,8 @@
     var url = tab.src === "material"
       ? "/api/wire?sub=material&tag=" + encodeURIComponent(tab.q)
       : "/api/wire?sub=list&type=" + encodeURIComponent(tab.q) +
-        "&hours=" + tab.hours + "&max=" + tab.max;
+        "&hours=" + tab.hours + "&max=" + tab.max +
+        (tab.cate ? "&cate=" + encodeURIComponent(tab.cate) : "");
     apiGet(url).then(function (d) {
       loading = false;
       setRefreshing(false);
@@ -388,5 +390,19 @@
     loadList(tab, { force: true });
   });
 
+  /* 分类提示条：京东 tab 显京享红包密令，其余 tab 提醒「先领红包再买」 */
+  function paintTip(tab) {
+    var el = $("wireTip");
+    if (!el) return;
+    if (tab.key === "jd") {
+      el.innerHTML = '🧧 下单前先领 <b>京享红包</b>：京东搜密令「<b>限时福利295</b>」，红包和券一起用更便宜';
+    } else if (tab.key === "all" || tab.key === "by" || tab.key === "tb") {
+      el.innerHTML = '🧧 记得领了红包再买更省钱 —— 线报里的券，叠加上红包一起用更便宜';
+    } else {
+      el.innerHTML = '🧧 记得领了红包再买更省钱';
+    }
+  }
+
   loadList(TABS[0]);
+  paintTip(TABS[0]);
 })();

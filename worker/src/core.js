@@ -280,6 +280,7 @@ function fixedLink(env, name, platform) {
   if (/京东|京享/.test(hay)) {
     if (/京享|红包/.test(hay) && env.LINK_JD_RED) return env.LINK_JD_RED;
     if (/外卖/.test(hay) && env.LINK_JD_WM) return env.LINK_JD_WM;
+    if (/领券/.test(hay) && env.LINK_JD_COUPON) return env.LINK_JD_COUPON;
     return env.LINK_JD_MAIN || "";
   }
   if (/拼多多|多多/.test(hay)) return env.LINK_PDD || "";
@@ -295,6 +296,7 @@ export function fixedLinks(env) {
     jdMain: env.LINK_JD_MAIN || "",
     jdRed: env.LINK_JD_RED || "",
     jdWm: env.LINK_JD_WM || "",
+    jdCoupon: env.LINK_JD_COUPON || "",
     pdd: env.LINK_PDD || "",
     dy: env.LINK_DY || "",
     jdRedWord: env.JD_RED_WORD || "",
@@ -566,19 +568,27 @@ export function parseWireTime(s) {
  *  ·  翻页一多就把用户晾在那儿了 —— 超预算就收手，有多少返多少（前端照样有内容）。
  *  ·  返回 { items, total, shown, hours, max, since, until }
  */
-export async function hdkWireReportRecent(type, hours, max, budgetMs) {
+export async function hdkWireReportRecent(type, hours, max, budgetMs, cate) {
   hours = Math.min(Math.max(Number(hours) || 12, 1), 720);
   max = Math.min(Math.max(Number(max) || 200, 20), 300);
   var cutoff = Date.now() - hours * 3600 * 1000;
   var deadline = Date.now() + Math.min(Math.max(Number(budgetMs) || 8000, 1500), 25000);
-  var MAXP = 30, BATCH = 8;    // 并发提到 8：批数少了，等待轮次也少了
+  /* cate：按分类过滤（中文，如「飞猪旅行」）。
+   * 为什么需要：好单库的分类专查接口（type=10367 等）有独立索引、更新滞后
+   * （实测飞猪专查比全量流慢 3 天），所以分类 tab 一律改从全量流（type=0）里筛。
+   * 稀疏分类（飞猪约占 7%）要翻更多页才凑得够，翻页上限相应放宽。 */
+  var sparse = !!cate;
+  var MAXP = sparse ? 60 : 30, BATCH = 8;   // 并发 8：批数少了，等待轮次也少了
   var row = [];     // { it, t }
   var total = 0;
+
+  function keep(it) { return !cate || it.category === cate; }
 
   function inWindowUnique() {
     var seen = {}, n = 0;
     row.forEach(function (x) {
       if (x.t && x.t < cutoff) return;
+      if (!keep(x.it)) return;
       if (seen[x.it.id]) return;
       seen[x.it.id] = 1; n++;
     });
@@ -620,6 +630,7 @@ export async function hdkWireReportRecent(type, hours, max, budgetMs) {
   var items = [];
   row.forEach(function (x) {
     if (x.t && x.t < cutoff) return;
+    if (!keep(x.it)) return;
     if (seen[x.it.id]) return;
     seen[x.it.id] = 1;
     x.it.ts = x.t;
@@ -630,7 +641,7 @@ export async function hdkWireReportRecent(type, hours, max, budgetMs) {
 
   return {
     items: items,
-    total: total,
+    total: sparse ? items.length : total,
     shown: items.length,
     hours: hours,
     max: max,

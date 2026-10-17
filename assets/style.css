@@ -690,6 +690,11 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
 .wire-tab.active { color: #fff; background: var(--red); border-color: var(--red); font-weight: 600; }
 .wire-tab-ico { font-size: 13px; line-height: 1; }
 .wire-meta { max-width: 1120px; margin: 0 auto; padding: 12px 28px 0; font-size: 12px; color: var(--text-3); min-height: 18px; }
+
+/* 分类提示条：京东 tab 显京享红包密令，其余 tab 提醒先领红包 */
+.wire-tip { max-width: 1120px; margin: 0 auto; padding: 10px 28px 0; font-size: 12.5px; color: var(--text-2); }
+.wire-tip b { color: var(--red); font-weight: 600; }
+@media (max-width: 720px) { .wire-tip { padding-left: 16px; padding-right: 16px; } }
 .wire-meta b { color: var(--text-2); font-weight: 600; }
 .wire-list { max-width: 1120px; margin: 0 auto; padding: 12px 28px 44px; display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; align-items: start; }
 .wire-card {
