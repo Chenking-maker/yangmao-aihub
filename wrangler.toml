@@ -37,6 +37,10 @@ LINK_DY = "https://z.douyin.com/JImh7NBm"
 # 京享红包口令（首页红包卡上可一键复制，去京东 APP 搜索领取）
 JD_RED_WORD = "限时福利295"
 
+# ---- 淘金币互助广场 ----
+# 站长自己的淘金币口令（cron 每天自动补种到广场第一位，别人打开页面就有点可帮）
+COIN_OWNER_TEXT = '69£inxATwUVffd₤ https://m.tb.cn/h.jWXlq82  HU287 最高赚1188加抵金'
+
 # ---- 京东联盟官方通道（自有账号直连 api.jd.com，彻底绕开好单库）----
 # 京东联盟的开放网关是公开的：用自己的 appKey / secretKey / siteId 就能转「任意」京东
 # 链接（商品页、会场、u.jd.com 短链都吃），佣金 100% 归自己 ——
@@ -75,3 +79,11 @@ JD_ACCESS_TOKEN = ""
 #  ② 每 30 分钟 = 全链路体检（异常发邮件）+ 重接口缓存预热
 [triggers]
 crons = ["0 0 * * *", "*/30 * * * *"]
+
+# ---- 淘金币互助广场：D1 数据库（发布 / 助力 / 组队全部存这里）----
+# 必须放在文件末尾：TOML 的 [[d1_databases]] 会开启新表，写在 [vars] 中间会把
+# 后面的变量（JD_APP_KEY 等）吞进这个表里，Worker 就读不到配置了。
+[[d1_databases]]
+binding = "DB"
+database_name = "yangmao-coin"
+database_id = "7ad3a40d-da86-492e-9b00-4d86405a2fe4"

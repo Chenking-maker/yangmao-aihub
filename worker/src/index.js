@@ -27,6 +27,7 @@ import {
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
   convertLink, proxyImage, dailyStats, bjDate, fixedLinks, extractLinkMaterial
 } from "./core.js";
+import { coinBoard, coinPublish, coinAct, coinDelete, coinSeedOwner, coinProbe } from "./coin.js";
 import { jdProbe } from "./jd.js";
 import { yzLifeBusinesses, yzPromotionLink } from "./yunzhan.js";
 import { sendAlert } from "./mailer.js";
@@ -520,6 +521,14 @@ async function deepHealth(env) {
     }
     return { ok: true, detail: r.url };
   }));
+  items.push(await probe("淘金币互助广场（D1）", async () => {
+    const r = await coinProbe(env);
+    if (typeof r === "string") {
+      if (/未绑定|未配置/.test(r)) return r;   // 没配 D1 只提示，不算故障
+      throw new Error(r);
+    }
+    return "在架 " + r.items + " 条";
+  }));
   items.push(await probe("省钱日报 · 推送通道", async () => {
     const has = [];
     if (env.PUSH_TOKEN) has.push("PushPlus 微信");
@@ -897,6 +906,38 @@ export default {
         return json(fixedLinks(env));
       }
 
+      /* ================= 淘金币互助广场 =================
+       * 无登录：前端在 localStorage 里生成一个 uid 代表「我」。
+       * 规则见 worker/src/coin.js 顶部注释（每天发布 10 / 助力 10、每条被助力 10）。
+       */
+      if (url.pathname === "/api/coin/board") {
+        return json(await coinBoard(env, {
+          uid: url.searchParams.get("uid"),
+          tab: url.searchParams.get("tab")
+        }));
+      }
+      if (url.pathname === "/api/coin/publish" && request.method === "POST") {
+        const b = await request.json().catch(function () { return {}; });
+        return json(await coinPublish(env, {
+          uid: b.uid, ip: ip, text: b.text, kind: b.kind, name: b.name, target: b.target
+        }));
+      }
+      if (url.pathname === "/api/coin/act" && request.method === "POST") {
+        const b = await request.json().catch(function () { return {}; });
+        return json(await coinAct(env, { uid: b.uid, ip: ip, id: b.id }));
+      }
+      if (url.pathname === "/api/coin/del" && request.method === "POST") {
+        const b = await request.json().catch(function () { return {}; });
+        return json(await coinDelete(env, { uid: b.uid, id: b.id }));
+      }
+      /* 站长口令补种（cron 每天自动跑一次；也可手动 ?token= 触发） */
+      if (url.pathname === "/api/coin/seed") {
+        if (!env.ALERT_TOKEN || url.searchParams.get("token") !== env.ALERT_TOKEN) {
+          return json({ error: "token 不对" }, 403);
+        }
+        return json(await coinSeedOwner(env));
+      }
+
       /* ---- 健康检查：?deep=1 时做全链路体检 ---- */
       if (url.pathname === "/api/health") {
         if (url.searchParams.get("deep") === "1") {
@@ -940,6 +981,8 @@ export default {
       if (ctx && ctx.waitUntil) ctx.waitUntil(run);
       return { daily: true };
     }
+    /* 每 30 分钟：站长淘金币口令补种（当天已种过会自己跳过，只查一次） */
+    if (ctx && ctx.waitUntil) ctx.waitUntil(coinSeedOwner(env).catch(function () { /* ignore */ }));
     const rep = scheduledHealth(env);
     if (ctx && ctx.waitUntil) ctx.waitUntil(warmup(env).catch(() => { /* ignore */ })); else await warmup(env).catch(() => { /* ignore */ });
     return rep;

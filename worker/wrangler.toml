@@ -56,6 +56,14 @@ JD_SUB_UNION_ID = "yangmao"
 JD_PID = ""
 # 可选：京东联盟 OAuth 拿到的 access_token（部分账号调用转链接口需要）
 JD_ACCESS_TOKEN = ""
+# ---- 淘金币互助广场 ----
+COIN_OWNER_TEXT = '69£inxATwUVffd₤ https://m.tb.cn/h.jWXlq82  HU287 最高赚1188加抵金'
+
+[[d1_databases]]
+binding = "DB"
+database_name = "yangmao-coin"
+database_id = "7ad3a40d-da86-492e-9b00-4d86405a2fe4"
+
 # 省钱日报的微信推送通道：PushPlus（个人微信扫码免费拿 token，填到 PUSH_TOKEN）
 # 或企业微信群机器人 webhook（填到 WECOM_WEBHOOK）。两个都不填则只生成日报、不推送。
 # 注意：接口异常告警也支持走这两个通道（没配 SMTP 授权码时的兜底）。
