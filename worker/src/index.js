@@ -907,8 +907,9 @@ export default {
       }
 
       /* ================= 淘金币互助广场 =================
-       * 无登录：前端在 localStorage 里生成一个 uid 代表「我」。
-       * 规则见 worker/src/coin.js 顶部注释（每天发布 10 / 助力 10、每条被助力 10）。
+       * 无登录：前端在 localStorage 里生成一个 uid 代表「我」，IP 取 CF-Connecting-IP。
+       * 规则见 worker/src/coin.js 顶部注释：
+       * 每个 IP 每天限发 1 条口令；助力留淘宝昵称；站长未满助力 1 次、满了助力 3 次才有发布资格。
        */
       if (url.pathname === "/api/coin/board") {
         return json(await coinBoard(env, {
@@ -924,7 +925,7 @@ export default {
       }
       if (url.pathname === "/api/coin/act" && request.method === "POST") {
         const b = await request.json().catch(function () { return {}; });
-        return json(await coinAct(env, { uid: b.uid, ip: ip, id: b.id }));
+        return json(await coinAct(env, { uid: b.uid, ip: ip, id: b.id, tao: b.tao }));
       }
       if (url.pathname === "/api/coin/del" && request.method === "POST") {
         const b = await request.json().catch(function () { return {}; });

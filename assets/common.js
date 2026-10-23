@@ -50,9 +50,25 @@
     toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2400);
   }
   function copyText(t, ok) {
+    /* 剪贴板 API 被拒（无手势/权限/HTTP）时用 execCommand 兜底，别让复制直接失败 */
+    function fallback() {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = t == null ? "" : String(t);
+        ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+        document.body.appendChild(ta);
+        ta.select();
+        var done = document.execCommand && document.execCommand("copy");
+        document.body.removeChild(ta);
+        toast(done ? (ok || "已复制") : "复制失败，请长按手动复制");
+      } catch (e) { toast("复制失败，请长按手动复制"); }
+    }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(t).then(function () { toast(ok || "已复制"); });
-    } else { toast("复制失败，请手动复制"); }
+      navigator.clipboard.writeText(String(t == null ? "" : t)).then(function () {
+        toast(ok || "已复制");
+      }, fallback);
+    } else { fallback(); }
   }
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {

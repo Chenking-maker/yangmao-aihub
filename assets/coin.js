@@ -1,9 +1,10 @@
 /* 羊毛AIHUB · 淘金币互助广场
  * ------------------------------------------------------------
  * 流程：粘贴自己的淘金币口令 → 上榜；帮别人点「复制口令去助力」→ 打开淘宝 →
- *       回来点「我已助力」记 1 次，同时解锁 1 条发布额度。
- * 额度、去重、上限全在 Worker 侧（worker/src/coin.js）判定，前端只做展示。
- * 无登录：本机 localStorage 里生成一个 uid 当作「我」，换浏览器就是另一个身份。
+ *       回来点「我已助力」并留下淘宝昵称登记，同时拿发布资格。
+ * 额度、去重、上限、助力门槛全在 Worker 侧（worker/src/coin.js）判定，前端只做展示。
+ * 无登录：本机 localStorage 里生成一个 uid 当作「我」，换浏览器就是另一个身份
+ *       （但发布按 IP 每天限 1 条，清缓存换号也绕不过）。
  */
 (function () {
   "use strict";
@@ -57,22 +58,25 @@
     var q = d.quota;
     var box = $("pgQuota");
     if (box) {
-      box.innerHTML =
-        '<span class="pg-q' + (q.pub >= q.pubMax ? " full" : "") + '">发布 <b>' + q.pub + "/" + q.pubMax + "</b></span>" +
-        '<span class="pg-q' + (q.helped >= q.helpMax ? " full" : "") + '">助力 <b>' + q.helped + "/" + q.helpMax + "</b></span>";
+      box.innerHTML = S.tab === "team"
+        ? '<span class="pg-q' + (num(q.pubTeam) >= num(q.pubTeamMax) ? " full" : "") + '">队伍 <b>' + num(q.pubTeam) + "/" + num(q.pubTeamMax) + "</b></span>"
+        : '<span class="pg-q' + (q.pub >= q.pubMax ? " full" : "") + '">发布 <b>' + q.pub + "/" + q.pubMax + "</b></span>" +
+          '<span class="pg-q' + (q.helped >= q.helpMax ? " full" : "") + '">助力 <b>' + q.helped + "/" + q.helpMax + "</b></span>";
     }
     var hint = $("pgHint");
     if (!hint) return;
     hint.className = "pg-hint";
-    if (q.pub >= q.pubMax) {
-      hint.textContent = "今天的 " + q.pubMax + " 条发布额度用完了，明天 0 点刷新";
+    if (S.tab === "team") {
+      hint.textContent = "组队 2~5 人 · 每人每天限发 5 支 · 别人复制你的口令就能入队";
+    } else if (q.pub >= q.pubMax) {
+      hint.textContent = "今天的 1 条发布额度用完了，明天 0 点刷新";
     } else if (q.gated) {
-      hint.textContent = "还差 " + q.miss + " 次助力：帮别人点一下再回来登记，就能发一条";
+      hint.textContent = q.ownerOpen
+        ? "还差 " + q.miss + " 次助力：先帮站长（或别人）复制口令助力一次，回来登记就能发布"
+        : "站长名额今天满了，还差 " + q.miss + " 次助力：帮别人助力 " + q.need + " 条后才能发布";
       hint.className = "pg-hint warn";
-    } else if (q.helped >= q.helpMax) {
-      hint.textContent = "今天 " + q.helpMax + " 次助力额度用完了，还能发 " + (q.pubMax - q.pub) + " 条";
     } else {
-      hint.textContent = "还能发 " + (q.pubMax - q.pub) + " 条 · 已帮 " + q.helped + " 人助力（帮 1 人 = 1 条额度）";
+      hint.textContent = "已获得发布资格 · 今天还能发 " + (q.pubMax - q.pub) + " 条口令 · 已帮 " + q.helped + " 人助力";
     }
 
     var ch = $("pgCntHelp"), ct = $("pgCntTeam");
@@ -83,7 +87,7 @@
   /* ---------------- 卡片 ---------------- */
   function cardHtml(it) {
     var isTeam = it.kind === "team";
-    var target = isTeam ? Math.max(1, num(it.target)) : num(S.data && S.data.quota ? S.data.quota.hitsMax : 10);
+    var target = isTeam ? Math.max(1, num(it.target)) : num(it.target || 10);
     var hits = num(it.hits);
     var pct = Math.min(100, Math.round((hits / target) * 100));
 
@@ -105,11 +109,24 @@
       if (it.word && it.link) body += '<div class="pg-note">' + esc(it.link) + "</div>";
       else if (it.note) body += '<div class="pg-note">' + esc(it.note) + "</div>";
     }
+    /* 站长条目专属引导：名额还在时，帮 1 次就拿到发布资格 */
+    if (it.owner && !it.full && !it.acted) {
+      body += '<div class="pg-cta">👑 帮站长助力 1 次，马上获得发布资格</div>';
+    }
 
     var bar = '<div class="pg-bar' + (isTeam ? "" : " help") + '"><i style="width:' + pct + '%"></i></div>';
     var meta = isTeam
       ? '<div class="pg-meta">已加入 <b>' + hits + "/" + target + "</b> 人" + (hits >= target ? " · 已满员" : "") + "</div>"
       : '<div class="pg-meta">已被助力 <b>' + hits + "/" + target + "</b> 次" + (it.full ? " · 今天满了" : "") + "</div>";
+
+    /* 助力者留痕（打码昵称）—— 对方能核对是谁帮了忙 */
+    var helpers = "";
+    var hs = it.helpers || [];
+    if (hs.length) {
+      var chips = hs.map(function (h) { return '<span class="pg-hchip">' + esc(h) + "</span>"; }).join("");
+      helpers = '<div class="pg-helpers"><span class="pg-hlabel">' + (isTeam ? "已入队" : "助力过") +
+        "：</span>" + chips + "</div>";
+    }
 
     var acts = "";
     if (it.mine) {
@@ -118,12 +135,15 @@
     } else if (it.acted) {
       acts = '<button class="pg-sbtn ok" disabled>✓ 已' + (isTeam ? "入队" : "助力") + "</button>" +
              '<button class="pg-sbtn" data-a="copy">再复制一次</button>';
+    } else if (it.full) {
+      acts = '<button class="pg-sbtn" disabled>已满 ' + target + (isTeam ? " 人" : " 次") + "</button>" +
+             '<button class="pg-sbtn" data-a="copy">复制口令</button>';
     } else {
       acts = '<button class="pg-sbtn pri" data-a="go">' + (isTeam ? "复制口令入队" : "复制口令去助力") + "</button>" +
              '<button class="pg-sbtn" data-a="done">我已' + (isTeam ? "入队" : "助力") + " · 记 1 次</button>";
     }
 
-    return '<article class="' + cls + '" data-id="' + esc(it.id) + '">' + head + body + bar + meta +
+    return '<article class="' + cls + '" data-id="' + esc(it.id) + '">' + head + body + bar + meta + helpers +
            '<div class="pg-card-acts">' + acts + "</div></article>";
   }
 
@@ -144,8 +164,9 @@
         : '<div class="pg-empty"><b>🫙</b>广场还是空的<br>把你的口令发第一条，别人进来就会先帮你点</div>';
       return;
     }
-    /* 未助力、没满的排前面（让每个人都有机会被人点到） */
+    /* 未助力、没满的排前面（让每个人都有机会被人点到）；站长永远第一 */
     items.sort(function (a, b) {
+      if (a.owner !== b.owner) return a.owner ? -1 : 1;
       if (a.mine !== b.mine) return a.mine ? 1 : -1;
       if (a.acted !== b.acted) return a.acted ? 1 : -1;
       if (a.full !== b.full) return a.full ? 1 : -1;
@@ -200,7 +221,7 @@
         load(true);
         return;
       }
-      W.toast("已发布，去下面帮别人点一下换额度");
+      W.toast(S.tab === "team" ? "队伍已发布，等人复制口令入队" : "已发布到广场，别人打开就能看到");
       if (ta) ta.value = "";
       try { localStorage.removeItem("ck_coin_draft"); } catch (e) { /* ignore */ }
       load(true);
@@ -231,11 +252,51 @@
     }
   }
 
-  function doDone(it, btn) {
+  /* ---------------- 助力 / 入队：先留淘宝昵称，再登记 ---------------- */
+  var modal = { it: null, btn: null };
+
+  function openTaoModal(it, btn) {
+    modal.it = it;
+    modal.btn = btn;
+    var mask = $("pgMask"), input = $("pgTaoInput");
+    if (!mask || !input) return;
+    var isTeam = it.kind === "team";
+    var title = $("pgModalTitle"), desc = $("pgModalDesc"), ok = $("pgModalOk");
+    if (title) title.textContent = isTeam ? "登记入队" : "登记助力";
+    if (desc) desc.textContent = isTeam
+      ? "留下你的淘宝昵称，队友能看到是谁入了队（页面只显示打码后的昵称）"
+      : "留下你的淘宝昵称，对方能看到是谁帮了忙（页面只显示打码后的昵称）";
+    if (ok) ok.textContent = isTeam ? "确认入队" : "确认助力";
+    input.value = "";
+    mask.hidden = false;
+    setTimeout(function () { try { input.focus(); } catch (e) { /* ignore */ } }, 60);
+  }
+  function closeTaoModal() {
+    var mask = $("pgMask");
+    if (mask) mask.hidden = true;
+    modal.it = null;
+    modal.btn = null;
+  }
+  function confirmTao() {
+    var it = modal.it;
+    if (!it) { closeTaoModal(); return; }
+    var input = $("pgTaoInput");
+    var tao = (input && input.value || "").replace(/\s+/g, "").trim();
+    if (tao.length < 2 || tao.length > 20) {
+      W.toast("淘宝昵称填 2-20 个字");
+      if (input) input.focus();
+      return;
+    }
+    var btn = modal.btn;
+    closeTaoModal();
+    submitAct(it, btn, tao);
+  }
+
+  function submitAct(it, btn, tao) {
     if (S.busy) return;
     S.busy = true;
     if (btn) { btn.disabled = true; btn.textContent = "登记中…"; }
-    W.apiPost("/api/coin/act", { uid: S.uid, id: it.id }).then(function (r) {
+    W.apiPost("/api/coin/act", { uid: S.uid, id: it.id, tao: tao }).then(function (r) {
       S.busy = false;
       if (!r || r.error) {
         W.toast(r && r.error ? r.error : "登记失败，稍后再试");
@@ -244,8 +305,12 @@
       }
       it.acted = true;
       it.hits = num(r.hits);
-      if (!r.repeat) W.toast("已记 1 次，发布额度 +1");
-      else W.toast("这条你已经登记过了");
+      if (r.helpers) it.helpers = r.helpers;
+      if (!r.repeat) {
+        W.toast(it.kind === "team" ? "已入队，等队友来凑" : "已记 1 次，发布资格到手");
+      } else {
+        W.toast("这条你已经登记过了");
+      }
       if (S.data && S.data.quota && r.quota) {
         var q = S.data.quota;
         q.helped = num(r.quota.helped);
@@ -282,7 +347,7 @@
       if (!it) return;
       var a = btn.getAttribute("data-a");
       if (a === "go") doGo(it);
-      else if (a === "done") doDone(it, btn);
+      else if (a === "done") openTaoModal(it, btn);
       else if (a === "copy") W.copyText(it.word || it.link || "", "口令已复制");
       else if (a === "del") doDel(it);
     });
@@ -290,6 +355,18 @@
 
   var pubBtn = $("pgPubBtn");
   if (pubBtn) pubBtn.addEventListener("click", publish);
+
+  /* 登记弹窗：助力 / 入队都要留淘宝昵称 */
+  var mask = $("pgMask");
+  if (mask) mask.addEventListener("click", function (e) { if (e.target === mask) closeTaoModal(); });
+  var okBtn = $("pgModalOk");
+  if (okBtn) okBtn.addEventListener("click", confirmTao);
+  var cancelBtn = $("pgModalCancel");
+  if (cancelBtn) cancelBtn.addEventListener("click", closeTaoModal);
+  var taoInput = $("pgTaoInput");
+  if (taoInput) taoInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); confirmTao(); }
+  });
 
   var pasteBtn = $("pgPasteBtn");
   if (pasteBtn) pasteBtn.addEventListener("click", function () {
