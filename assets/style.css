@@ -2263,31 +2263,55 @@ body.has-page-side.ps-closed .side-toggle:hover { left: 0; }
 }
 
 /* ============================================================
-   v2.22 线报广场：关键词搜索框
+   v2.24 线报广场：hero 卡（标题/介绍/搜索一体化，搜索内嵌分区）
    ============================================================ */
-.wire-search {
-  display: flex; align-items: center; gap: 8px;
-  max-width: 1080px; margin: 0 auto 10px; padding: 0 16px;
+.wire-head { max-width: 1120px; margin: 0 auto; padding: 20px 16px 0; }
+.wire-hero {
+  background: linear-gradient(128deg, #ffffff 0%, #fffaf6 52%, #fff5ed 100%);
+  border: 1px solid var(--hairline-2);
+  border-radius: 16px;
+  padding: 20px 22px 16px;
+  box-shadow: 0 1px 2px rgba(20, 12, 4, 0.03);
 }
-.wire-search input {
-  flex: 1; min-width: 0; height: 38px; padding: 0 14px;
+.wire-search {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 0 0; padding: 13px 0 0;
+  border-top: 1px dashed var(--hairline-2);
+  max-width: none;
+}
+.wire-search-box {
+  flex: 1; min-width: 0; height: 40px; padding: 0 15px;
+  display: flex; align-items: center; gap: 8px;
   border: 1px solid var(--hairline-2); border-radius: 999px;
-  background: #fff; color: var(--text-1); font-size: 13.5px; outline: none;
+  background: #fff;
   transition: border-color .16s, box-shadow .16s;
 }
-.wire-search input:focus {
+.wire-search-box:focus-within {
   border-color: var(--red);
   box-shadow: 0 0 0 3px var(--red-bg);
 }
-.wire-search input::placeholder { color: var(--text-3); }
+.wire-search-box input {
+  flex: 1; min-width: 0; height: 100%;
+  border: none; outline: none; background: transparent;
+  color: var(--text-1); font-size: 13.5px;
+}
+.wire-search-box input::placeholder { color: var(--text-3); }
+.wire-search-box input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.wire-search-ico { color: var(--text-3); flex-shrink: 0; }
 .wire-search button {
-  height: 38px; padding: 0 18px; border: none; border-radius: 999px;
+  height: 40px; padding: 0 20px; border: none; border-radius: 999px;
   background: var(--red); color: #fff; font-size: 13.5px; font-weight: 600;
-  cursor: pointer; transition: opacity .16s;
+  cursor: pointer; transition: opacity .16s, transform .16s;
 }
 .wire-search button:hover { opacity: .88; }
+.wire-search button:active { transform: scale(.97); }
+.wire-tabs { margin-top: 12px; }
 @media (max-width: 640px) {
-  .wire-search { padding: 0 12px; margin-bottom: 8px; }
-  .wire-search input { height: 36px; font-size: 13px; }
-  .wire-search button { height: 36px; padding: 0 14px; }
+  .wire-head { padding: 14px 12px 0; }
+  .wire-hero { padding: 16px 16px 13px; border-radius: 14px; }
+  .wire-head-side { width: 100%; }
+  .wire-search { margin-top: 12px; padding-top: 11px; }
+  .wire-search-box { height: 37px; }
+  .wire-search-box input { font-size: 13px; }
+  .wire-search button { height: 37px; padding: 0 15px; font-size: 13px; }
 }
