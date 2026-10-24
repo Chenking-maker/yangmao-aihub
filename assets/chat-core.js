@@ -166,9 +166,44 @@
       }
       /* 淘口令/分享 token：10 位以上、中间带 - 的 base62 串 */
       if (/\b[A-Za-z0-9]{10,}-[A-Za-z0-9]{10,}[A-Za-z0-9]*\b/.test(s)) return true;
+      /* 新版斜杠式淘口令：3輹👋Zhi6/8WjOTDefEgo/:// CA1501,打開/ */
+      if (/(?<![./\w])[A-Za-z0-9]{4,14}\/[A-Za-z0-9]{6,26}\/?(?::\/\/|[，,。]\s*打|打[開开])/.test(s)) return true;
+      /* 旧式符号口令：（₤xxxx₤） */
+      if (/[₤£¥￥$€][A-Za-z0-9]{8,40}[₤£¥￥$€]/.test(s)) return true;
       /* 商品 id= 形式 */
       if (/[?&]id=\d{6,}/.test(s)) return true;
       return false;
+    }
+
+    /* ---------- 从整段「线报分享文案」里提取商品名 ----------
+     * 用户从淘宝/线报群复制的整段文案长这样：
+     *   7克林斯曼AI扫地机器人…三合一体机【包邮】 【推荐理由】回头客超1百!
+     *   【到手价】 534.00 元 【券面额】 105 元 【下单链接】https://m.tb.cn/h.jdyOejm
+     *   【领红包】天天领超级红包… 3輹👋Zhi6/8WjOTDefEgo/:// CA1501,打開/
+     * 转链要的是商品 ID，口令和 m.tb.cn 短链在开放接口里都提不出 ID ——
+     * 但商品名能搜：把链接、【】标签段、口令段、社交尾巴剃掉，最长那段就是商品名。 */
+    function extractProductName(text) {
+      var s = String(text || "");
+      if (!s) return "";
+      s = s.replace(/https?:\/\/\S+/g, " ");
+      /* 新版斜杠式淘口令整段（…Zhi6/8WjOTDefEgo/:// CA1501,打開/，前段短至 4 字符；
+       * 「://」后常有空格再接 CA1501 之类的尾巴，中间用惰性跨空格匹配） */
+      s = s.replace(/[\u4e00-\u9fa5A-Za-z0-9]{0,4}[A-Za-z0-9]{4,14}\/[A-Za-z0-9]{5,24}\/?\s*(?::\/\/)?[\s\S]{0,18}?,?\s*打[開开]\/?/g, " ");
+      /* 旧式符号口令（₤/£/¥/$/￥ 包裹） */
+      s = s.replace(/[₤£¥￥$€][^\s₤£¥￥$€]{5,40}[₤£¥￥$€]/g, " ");
+      /* 【标签】段连内容一起去掉（【推荐理由】回头客超1百! 这类） */
+      s = s.replace(/【[^【】]{1,40}】/g, " ");
+      /* 纯社交动作词（打开/复制/长按…） */
+      s = s.replace(/[\u4e00-\u9fa5]{0,3}(打开|打開|复制|長按|长按|发送|分享)/g, " ");
+      var segs = s.split(/[\s,，。、!！?？;；~～|]+/).filter(function (x) {
+        /* 红包/下单社交尾巴不是商品名 */
+        return x && x.length >= 4 && /[\u4e00-\u9fa5]/.test(x) &&
+          x.indexOf("红包") < 0 && x.indexOf("下单") < 0 &&
+          x.replace(/[0-9.\s]/g, "").length >= 3;
+      });
+      if (!segs.length) return "";
+      segs.sort(function (a, b) { return b.length - a.length; });
+      return segs[0].slice(0, 60);
     }
 
     function sendChat(text) {
@@ -201,14 +236,24 @@
     /* ---------- 直转链：发链接 → 回优惠链接 + 口令 ---------- */
     function convertModeReply(text, done) {
       W.apiPost("/api/convert", { text: text }).then(function (r) {
-        if (!r || (!r.url && !r.taoCode)) {
-          done("这条我没转换出可用链接 —— 把淘宝/京东的**商品链接**或者**淘口令**再发我一次试试（要含 http 的那种）。", [], [], []);
+        var ok = r && r.converted && (r.url || r.taoCode);
+        if (ok) {
+          var reply = "转好啦 👇 这就是你的优惠链接，点「打开」直接跳；淘口令可以复制后发微信好友，对方打开淘宝自动识别。";
+          done(reply, [], [], [r]);
           return;
         }
-        var reply = r.converted
-          ? "转好啦 👇 这就是你的优惠链接，点「打开」直接跳；淘口令可以复制后发微信好友，对方打开淘宝自动识别。"
-          : (r.note || "这条暂时转不了优惠通道，先把能打开的链接给你：");
-        done(reply, [], [], [r]);
+        /* 转不出优惠链接（口令/短链提不出商品ID）→ 不把人挡回去：
+         * 从整段文案里抠出商品名，直接搜带券商品，卡上照样能领券下单。 */
+        var name = extractProductName(text);
+        if (name && name.length >= 4) {
+          searchModeReply(name, done, {
+            prefix: "这条口令/短链转不了优惠通道（开放接口提不出商品ID），我先按商品名「" + name + "」帮你搜到了这些带券好物 👇 以后**直接复制商品名发我**就行，不用带链接口令。",
+            links: r && r.url ? [r] : []
+          });
+          return;
+        }
+        if (r && r.url) { done((r.note || "这条暂时转不了优惠通道，先给你能打开的链接："), [], [], [r]); return; }
+        done("这条我没转换出可用链接 —— 把**商品名**复制发我（比如「xx扫地机器人」），我就能帮你搜到带券商品。", [], [], []);
       }).catch(function () {
         done("网络开小差了，转链没成功，再发一次链接试试？", [], [], []);
       });
@@ -237,16 +282,36 @@
       for (var k in map) if (q.indexOf(k) > -1) return window.PRODUCTS.filter(function (p) { return p.id === map[k]; });
       return window.PRODUCTS.slice(0, 2);
     }
-    function searchModeReply(q, done) {
+    function searchModeReply(q, done, opts) {
+      opts = opts || {};
       var cands = extractKeywords(q);
+      /* 长商品名（从整段文案抠出来的那种）再补几个前缀截断变体：
+       * 「7克林斯曼AI扫地机器人全自动家用超薄吸尘器智能扫拖吸三合一体机」
+       * 全名太长搜不全，但「克林斯曼AI扫地机器人」这种 10 字前后缀命中率很高。
+       * 先去掉前导数字（规格前缀「7」「24袋」这类），再从短到长都试一遍。 */
+      var base = String(q || "").replace(/[\s,，。、]+/g, "").replace(/^\d+/, "");
+      if (base.length > 8) {
+        [8, 10, 12, 14, 16, 20, 24].forEach(function (n) {
+          if (base.length > n) cands.push(base.slice(0, n));
+        });
+        cands.push(base);
+      }
+      var seen = {};
+      cands = cands.filter(function (k) { return k && !seen[k] && (seen[k] = 1); });
       if (!cands.length) cands = [q];
       var idx = 0;
       function tryNext() {
-        if (idx >= cands.length) { done("关键词「" + cands[0] + "」暂时没搜到带券商品，换个说法试试？比如直接说商品名。", demoFallback(q), [], []); return; }
+        if (idx >= cands.length) {
+          done((opts.prefix || "") + "关键词「" + cands[0] + "」暂时没搜到带券商品，换个说法试试？比如直接说商品名。", demoFallback(q), [], opts.links || []);
+          return;
+        }
         var kw = cands[idx++];
+        var last = idx >= cands.length;
         W.apiGet("/api/search?q=" + encodeURIComponent(kw)).then(function (list) {
-          if (Array.isArray(list) && list.length >= 3) {
-            done("AI 实时选品 · 关键词「" + kw + "」 · 命中 " + list.length + " 款，挑了几款性价比高的：", list.slice(0, 3), [], []);
+          var n = Array.isArray(list) ? list.length : 0;
+          /* 最后一个候选放宽到 1 个也出（总比空手强）；前面要求 >=2 保证质量 */
+          if (n >= (last ? 1 : 2)) {
+            done((opts.prefix || "") + "AI 实时选品 · 关键词「" + kw + "」 · 命中 " + n + " 款，挑了几款性价比高的：", list.slice(0, 3), [], opts.links || []);
           } else tryNext();
         }).catch(function () { done("网络开小差了，先用演示数据顶一下：", demoFallback(q), [], []); });
       }

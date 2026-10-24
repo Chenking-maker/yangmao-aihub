@@ -2261,3 +2261,33 @@ body.has-page-side.ps-closed .side-toggle:hover { left: 0; }
   background: var(--red); border-color: var(--red); color: #fff;
   box-shadow: 0 2px 8px rgba(217, 56, 50, .22);
 }
+
+/* ============================================================
+   v2.22 线报广场：关键词搜索框
+   ============================================================ */
+.wire-search {
+  display: flex; align-items: center; gap: 8px;
+  max-width: 1080px; margin: 0 auto 10px; padding: 0 16px;
+}
+.wire-search input {
+  flex: 1; min-width: 0; height: 38px; padding: 0 14px;
+  border: 1px solid var(--hairline-2); border-radius: 999px;
+  background: #fff; color: var(--text-1); font-size: 13.5px; outline: none;
+  transition: border-color .16s, box-shadow .16s;
+}
+.wire-search input:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px var(--red-bg);
+}
+.wire-search input::placeholder { color: var(--text-3); }
+.wire-search button {
+  height: 38px; padding: 0 18px; border: none; border-radius: 999px;
+  background: var(--red); color: #fff; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; transition: opacity .16s;
+}
+.wire-search button:hover { opacity: .88; }
+@media (max-width: 640px) {
+  .wire-search { padding: 0 12px; margin-bottom: 8px; }
+  .wire-search input { height: 36px; font-size: 13px; }
+  .wire-search button { height: 36px; padding: 0 14px; }
+}

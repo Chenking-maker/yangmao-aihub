@@ -175,7 +175,7 @@ async function jdInvoke(env, method, biz, timeoutMs) {
 var JD_HINT = {
   "403": "该应用未开通「社交媒体转链」接口权限（jd.union.open.promotion.bysubunionid.get）。去 union.jd.com 联系联盟客服或发邮件 cps@jd.com 申请，开通后本通道自动生效，不用改代码",
   "2001701": "转链接口禁止使用「导购媒体ID」，只认「网站ID / APP ID」。最快的解法：union.jd.com → 推广管理 → 网站管理 → 新建网站（网站名填「羊毛AIHUB」，网址填 https://chenking-maker.github.io/yangmao-aihub/，一般即时通过）→ 把拿到的网站ID 配成 JD_SITE_ID 即可",
-  "2001703": "网站推广位还没通过京东审核（jd_root.txt 验证文件已就位，回联盟后台点「完成验证」后等审核状态变成「已通过」，本通道自动生效）",
+  "2001703": "网站推广位未过审/审核失败（回 union.jd.com 看失败原因重建推广位；期间京东转链自动走好单库官方授权通道，在 publish.haodanku.com/Promotioncenter/auth?platform=2 完成授权即可）",
   "1002024": "siteId不能为空：按 2001701 的解法建一个网站推广位，把网站ID 配成 JD_SITE_ID",
   "21": "appKey 无效或签名不通过（检查 JD_APP_KEY / JD_APP_SECRET 是否成对）",
   "2001602": "账号未签署联盟协议或没有母账号权限",
@@ -203,6 +203,12 @@ function jdSoft(code, desc) {
 export async function jdUniversal(env, materialUrl, opts) {
   opts = opts || {};
   if (!jdReady(env) || !materialUrl) return null;
+
+  /* 软失败冷却：推广位没过审/权限没开时，京东网关每次调用都白等几秒才回同样的错。
+   * 记住最近一次软失败，10 分钟内直接回缓存的结果，不碰网关。 */
+  if (jdCooldown.until > Date.now() && jdCooldown.code) {
+    return { error: jdCooldown.error, code: jdCooldown.code, soft: true, cooldown: true };
+  }
 
   function reqOf(chainType) {
     /* ⚠️ 空值字段必须剔除：京东网关对空串/0 的可选参数会抛 67「网关依赖服务异常」，
@@ -250,7 +256,16 @@ export async function jdUniversal(env, materialUrl, opts) {
       if (/403|2001701|2001703|1002024|^21$|Invalid app_key|no-node|bad-json/i.test(String(r.code))) break;
     }
   }
+  if (soft && lastCode) jdCooldownMark(lastCode, lastErr);
   return { error: lastErr, code: lastCode, soft: soft };
+}
+
+/* 软失败冷却状态（isolate 级内存即可，过期了自然重试） */
+var jdCooldown = { until: 0, code: "", error: "" };
+function jdCooldownMark(code, error) {
+  jdCooldown.until = Date.now() + 10 * 60 * 1000;
+  jdCooldown.code = String(code || "");
+  jdCooldown.error = String(error || "");
 }
 
 /* 探针：给 /api/health 用，一眼看出京东官方通道通不通、还差哪个值 */

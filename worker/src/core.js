@@ -134,7 +134,8 @@ export async function hdkJdRelink(env, materialId, couponUrl) {
     material_id: String(materialId)
   });
   if (couponUrl) body.set("coupon_url", String(couponUrl));
-  if (env.JD_UNION_ID) body.set("subUnionId", String(env.JD_UNION_ID));
+  /* subUnionId 是「渠道标识」（字母数字，订单归因用），不是联盟ID —— 用 HDK_CHANNEL */
+  if (env.HDK_CHANNEL) body.set("subUnionId", String(env.HDK_CHANNEL));
   try {
     var res = await fetch(HDK_BASE + "/unify_jditems_link", { method: "POST", body: body });
     var json = await res.json();
@@ -262,7 +263,8 @@ async function jdConference(env, activityUrl, title) {
     });
     var j = await res.json();
     if (j && Number(j.code) === 500 && /未开通/.test(String(j.msg || ""))) {
-      return { needAuth: true, authUrl: "https://union.jd.com/proManager/custompromotion" };
+      /* 指向好单库「京东官方授权」页：登录京东联盟账号完成 OAuth 后本接口自动可用 */
+      return { needAuth: true, authUrl: "https://publish.haodanku.com/Promotioncenter/auth?platform=2" };
     }
   } catch (e) { /* ignore */ }
   return null;
@@ -680,6 +682,54 @@ export async function hdkWireReportRecent(type, hours, max, budgetMs, cate) {
   };
 }
 
+/* 线报搜索专用「深翻池」：hdkWireReportRecent 的 max 上限只有 300，全量流里 300 条
+ * 只覆盖最近几小时 —— 搜「猫粮」这种稀疏词基本捞不到。这里放开上限翻更深的页
+ * （最多 80 页 / 2500 条 / 25 秒预算），攒一个大原始池供关键词过滤。
+ * 池子按时间窗共享缓存：第一次搜索浅出（SWR），后台翻深，之后所有搜索都又快又全。 */
+export async function hdkWireSearchPool(hours, budgetMs, hardMax) {
+  hours = Math.min(Math.max(Number(hours) || 168, 1), 720);
+  hardMax = Math.min(Math.max(Number(hardMax) || 1500, 100), 3000);
+  var cutoff = Date.now() - hours * 3600 * 1000;
+  var deadline = Date.now() + Math.min(Math.max(Number(budgetMs) || 12000, 1500), 25000);
+  var MAXP = 80, BATCH = 8;
+  var row = [];
+
+  for (var start = 1; start <= MAXP; start += BATCH) {
+    if (start > 1 && Date.now() >= deadline) break;   // 预算用完收手（浅池也先能用）
+    var nums = [];
+    for (var i = start; i < start + BATCH && i <= MAXP; i++) nums.push(i);
+    var res = [];
+    await pool(nums, BATCH, async function (p) {
+      try {
+        var r = await withTimeout(hdkWireReport("0", p), 5000, "页" + p);
+        if (r) res.push({ p: p, r: r });
+      } catch (e) { /* 单页失败跳过 */ }
+    });
+    if (!res.length) break;
+    var batchAllOld = true;
+    res.forEach(function (x) {
+      (x.r.items || []).forEach(function (it) {
+        var t = parseWireTime(it.time);
+        row.push({ it: it, t: t });
+        if (!t || t >= cutoff) batchAllOld = false;
+      });
+    });
+    if (row.length >= hardMax) break;
+    if (batchAllOld) break;                            // 整批早于窗口 → 后面只会更早
+  }
+
+  var seen = {}, items = [];
+  row.forEach(function (x) {
+    if (x.t && x.t < cutoff) return;
+    if (!x.it || !x.it.id || seen[x.it.id]) return;
+    seen[x.it.id] = 1;
+    x.it.ts = x.t;
+    items.push(x.it);
+  });
+  items.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  return items;
+}
+
 /* ================= 素材线报（宠物/美妆） ================= */
 
 /* 素材标签：爆款/宠物/母婴/美妆/线报 */
@@ -877,6 +927,15 @@ export function extractLinkMaterial(text) {
   var token = s.match(/\b([A-Za-z0-9]{10,}-[A-Za-z0-9]{10,}[A-Za-z0-9]*)\b/);
   if (token) return { platform: "淘宝", materialId: token[1], couponUrl: "", kind: "tb" };
 
+  /* 新版斜杠式淘口令整段：…Zhi6/8WjOTDefEgo/:// CA1501,打開/ （开放接口提不出商品ID，
+   * 单独标记 kind=tb-word，让 convertLink 给「复制商品名」引导而不是瞎转）。
+   * 前段 4~14 字符（Zhi6 这类短前缀）+ 排除 URL 上下文（前面是 . 或 / 的是链接不是口令）。 */
+  var tbWord = s.match(/(?<![./\w])([A-Za-z0-9]{4,14}\/[A-Za-z0-9]{6,26})\/?\s*(?::\/\/|[，,。]\s*打|打[開开])/);
+  if (tbWord) return { platform: "淘宝", materialId: tbWord[1], couponUrl: "", kind: "tb-word" };
+  /* 旧式符号口令：（₤xxxx₤）/（£xxx£） */
+  var symWord = s.match(/[₤£¥￥$€]([A-Za-z0-9]{8,40})[₤£¥￥$€]/);
+  if (symWord) return { platform: "淘宝", materialId: symWord[1], couponUrl: "", kind: "tb-word" };
+
   // 淘宝链接但提不出 ID
   if (/taobao\.com|tmall\.com|tb\.cn/i.test(s)) {
     return { platform: "淘宝", materialId: "", couponUrl: "", kind: "tb-unknown" };
@@ -973,6 +1032,21 @@ export async function convertLink(env, text) {
       note: (jdFallback
         ? "京东链接可以直接打开，下单前记得领京享红包" + why + "；返利通道升级后自动生效"
         : "这条京东链接暂时转不了，换一个试试" + why)
+    };
+  }
+
+  /* 淘口令（新版斜杠式 / 旧式符号式）：开放接口解析口令需要好单库增值接口
+   * （analyze.taoword / analyze.clipboard，app_id+sign 鉴权），还没开通 ——
+   * 不瞎转，给原链接 + 引导用户发商品名（前端会顺手搜带券商品）。 */
+  if (m.kind === "tb-word") {
+    return {
+      platform: "淘宝",
+      converted: false,
+      url: rawUrl || "",
+      couponUrl: "",
+      note: rawUrl
+        ? "口令里的链接能直接打开，但口令本身在开放接口里提不出商品ID（需要好单库增值接口）—— 把商品名复制发我，我直接帮你搜带券商品"
+        : "这条口令在开放接口里提不出商品ID —— 把商品名复制发我（比如「xx扫地机器人」），我帮你搜带券商品"
     };
   }
 

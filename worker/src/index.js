@@ -24,7 +24,7 @@ import {
   normalizeList, hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
   hdkActivityList, hdkConference, relayActivity, verifyActivities, withTimeout, pool,
   hdkWireCategories, hdkWireReport, hdkWireReportRecent, hdkMaterialCommunities, hdkMaterialItems,
-  hdkColumn,
+  hdkColumn, hdkWireSearchPool,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
   convertLink, proxyImage, dailyStats, bjDate, fixedLinks, extractLinkMaterial
 } from "./core.js";
@@ -757,9 +757,23 @@ export default {
         const rawHours = url.searchParams.get("hours");
         const hours = Number(rawHours === null ? 12 : rawHours);
         const max = Math.min(Math.max(Number(url.searchParams.get("max")) || 200, 20), 300);
-        /* cate：按中文分类从全量流里筛（分类专查接口索引滞后，见 core.js 注释） */
+        /* cate：按中文分类从全量流里筛（分类专查接口索引滞后，见 core.js 注释）
+         * q：关键词搜索 —— 拉一份 7 天/300 条的大窗口原始缓存（不同关键词共享同一次
+         *    上游翻页），再在 title + 全部文案行里过滤 */
         const cate = (url.searchParams.get("cate") || "").slice(0, 20);
-        const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + cate + ":" + hours + ":" + max;
+        const q = (url.searchParams.get("q") || "").trim().slice(0, 20);
+        const key = "wn:" + sub + ":" + (url.searchParams.get("type") || "") + ":" + (url.searchParams.get("tag") || "") + ":" + cate + ":" + (q ? "q:" + q : "") + ":" + hours + ":" + max;
+
+        const kwLower = q.toLowerCase();
+        const wireHit = (it) => {
+          if (!it) return false;
+          if (String(it.title || "").toLowerCase().indexOf(kwLower) >= 0) return true;
+          const lines = it.lines || [];
+          for (let li = 0; li < lines.length; li++) {
+            if (String((lines[li] && lines[li].text) || "").toLowerCase().indexOf(kwLower) >= 0) return true;
+          }
+          return false;
+        };
 
         /* 翻页拉线报要打很多次上游，而 Cloudflare 边缘到好单库一次就可能要好几秒，
            所以这里最看重「秒回」：只要缓存里还有东西，哪怕旧了也先发给用户，
@@ -769,9 +783,33 @@ export default {
           if (sub === "categories") data = await hdkWireCategories();
           else if (sub === "list") {
             const type = url.searchParams.get("type") || "0";
-            data = hours > 0
-              ? await hdkWireReportRecent(type, hours, max, budget, cate)
-              : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
+            if (q) {
+              /* 搜索模式：共享一份深翻大池（不带 q 缓存，各关键词复用同一次翻页）。
+               * SWR：池子在就秒回（哪怕浅），后台 20 秒翻深；第一次搜索前台最多等
+               * WIRE_BUDGET*2（12s），之后的搜索都是毫秒级 + 全量。 */
+              const rawKey = "wn:list:0:::srch:0:168:300";
+              let raw = await heavyGet(rawKey);
+              const freshEnough = raw && (Date.now() - raw.t) / 1000 < WIRE_TTL;
+              if (!freshEnough) {
+                if (raw && ctx && ctx.waitUntil) {
+                  ctx.waitUntil(Promise.resolve()
+                    .then(() => hdkWireSearchPool(168, 20000, 2500))
+                    .then(items => heavySet(rawKey, { total: items.length, items: items, hours: 168, max: 300 }))
+                    .catch(() => { /* 翻深失败继续用浅池 */ }));
+                } else {
+                  const items = await hdkWireSearchPool(168, Math.max(budget, WIRE_BUDGET * 2), 2500);
+                  raw = { t: Date.now(), data: { total: items.length, items: items, hours: 168, max: 300 } };
+                  await heavySet(rawKey, raw.data).catch(() => { /* 缓存失败不影响返回 */ });
+                }
+              }
+              const rawItems = (raw && raw.data && raw.data.items) || [];
+              const hitItems = rawItems.filter(wireHit);
+              data = { total: hitItems.length, items: hitItems, q: q, hours: 168, max: 300 };
+            } else {
+              data = hours > 0
+                ? await hdkWireReportRecent(type, hours, max, budget, cate)
+                : await hdkWireReport(type, Number(url.searchParams.get("page") || 1));
+            }
           } else if (sub === "material") {
             const tag = url.searchParams.get("tag") || "宠物";
             const comms = await hdkMaterialCommunities(tag);

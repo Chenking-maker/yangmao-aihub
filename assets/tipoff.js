@@ -36,6 +36,7 @@
   var metaEl = $("wireMeta");
   var refreshBtn = $("wireRefresh");
   var current = "all";
+  var currentTab = TABS[0];   // 刷新按钮用（搜索 tab 不在 TABS 里）
   var loading = false;
 
   // 渲染 pill tabs
@@ -49,6 +50,8 @@
       tabsEl.querySelectorAll(".wire-tab").forEach(function (x) { x.classList.remove("active"); });
       b.classList.add("active");
       current = t.key;
+      currentTab = t;
+      clearSearchInput();
       paintTip(t);
       loadList(t);
     });
@@ -345,7 +348,9 @@
   }
 
   function showEmpty(tab) {
-    var msg = tab.src === "material"
+    var msg = tab.key === "search"
+      ? "最近 7 天的线报里没搜到「" + (tab.kw || "") + "」—— 换个关键词试试，或过几分钟等新线报"
+      : tab.src === "material"
       ? "「" + tab.label + "」暂无推荐好物，稍后再来看看"
       : "「" + tab.label + "」暂时没有新线报，换分类看看";
     listEl.innerHTML =
@@ -374,7 +379,7 @@
 
   /* 会话级缓存：同一标签页内反复打开线报广场时先秒出旧数据，再后台换新。
    * 移动端「打开慢」的一半原因是每次重开都重新等接口、重新下几十张图。 */
-  function wireCacheKey(tab) { return "wool:wire:" + tab.key; }
+  function wireCacheKey(tab) { return "wool:wire:" + tab.key + (tab.kw ? ":" + tab.kw : ""); }
   function wireCacheGet(tab) {
     try {
       var raw = sessionStorage.getItem(wireCacheKey(tab));
@@ -411,6 +416,11 @@
 
   function paintMeta(tab, d) {
     var items = (d && d.items) || [];
+    if (tab.key === "search") {
+      metaEl.innerHTML = '搜「<b>' + W.esc(tab.kw) + '</b>」在最近 <b>7 天</b>线报里命中 <b>' + items.length +
+        '</b> 条 · 没找到就换个词，或等线报更新（新线报几分钟内就会出现）';
+      return;
+    }
     if (tab.src === "material") {
       metaEl.innerHTML = '共 <b>' + items.length + '</b> 条推荐好物 · 点卡片右上角 ⭐ 收藏整条，商品行点「收藏」存单个宝贝';
     } else {
@@ -447,10 +457,18 @@
       ? "/api/wire?sub=material&tag=" + encodeURIComponent(tab.q)
       : "/api/wire?sub=list&type=" + encodeURIComponent(tab.q) +
         "&hours=" + tab.hours + "&max=" + tab.max +
-        (tab.cate ? "&cate=" + encodeURIComponent(tab.cate) : "");
+        (tab.cate ? "&cate=" + encodeURIComponent(tab.cate) : "") +
+        (tab.kw ? "&q=" + encodeURIComponent(tab.kw) : "");
     apiGet(url).then(function (d) {
       loading = false;
       setRefreshing(false);
+      /* 素材 tab + 关键词：素材量小（十几条），前端直接过滤，不打后端 */
+      if (tab.kw && tab.src === "material" && d && Array.isArray(d.items)) {
+        var kw2 = tab.kw.toLowerCase();
+        d = { total: 0, items: d.items.filter(function (it) {
+          return String(it.title || "").toLowerCase().indexOf(kw2) >= 0;
+        }) };
+      }
       wireCachePut(tab, d);
       /* 跟缓存比对：没变化就只更新计数，不重排整个列表（避免刷新时画面闪跳） */
       var fresh = (d && d.items) || [];
@@ -474,9 +492,38 @@
   }
 
   refreshBtn.addEventListener("click", function () {
-    var tab = TABS.filter(function (t) { return t.key === current; })[0];
-    loadList(tab, { force: true });
+    loadList(currentTab, { force: true });
   });
+
+  /* ---------- 关键词搜索 ----------
+   * 线报 tab：后端在 7 天/300 条大窗口里搜（原始列表缓存共享，翻页只打一次上游）；
+   * 素材 tab：前端直接过滤当前列表。搜索时 tabs 上的 active 全清掉，
+   * 点任意分类 tab 自动退出搜索。 */
+  function searchTab(kw) {
+    return { key: "search", label: "搜索", icon: "🔍", src: currentTab.src === "material" ? "material" : "wire", q: currentTab.src === "material" ? currentTab.q : "0", hours: 168, max: 300, kw: kw };
+  }
+  function clearSearchInput() {
+    var inp = $("wireSearchInput");
+    if (inp) inp.value = "";
+  }
+  function doSearch() {
+    var inp = $("wireSearchInput");
+    if (!inp || loading) return;
+    var kw = (inp.value || "").trim();
+    if (!kw) { W.toast("先输入要搜的关键词"); return; }
+    tabsEl.querySelectorAll(".wire-tab").forEach(function (x) { x.classList.remove("active"); });
+    var t = searchTab(kw);
+    current = "search";
+    currentTab = t;
+    paintTip(t);
+    loadList(t);
+  }
+  var searchBtn = $("wireSearchBtn");
+  var searchInput = $("wireSearchInput");
+  if (searchBtn) searchBtn.addEventListener("click", doSearch);
+  if (searchInput) {
+    searchInput.addEventListener("keydown", function (e) { if (e.key === "Enter") doSearch(); });
+  }
 
   /* 红包密令（从 /api/links 拿，改口令不用改前端） */
   var RED_WORDS = { tb: "", jd: "" };
