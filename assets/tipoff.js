@@ -21,7 +21,9 @@
   /* 每个分类的窗口：hours=时间窗口（小时），max=最多保留条数 */
   var TABS = [
     { key: "all", label: "全部", icon: "🧩", src: "wire", q: "0", hours: 12, max: 50 },
-    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "0", cate: "飞猪旅行", hours: 240, max: 150 },
+    /* 飞猪走专查 type=10367：全量流里淘宝/京东实时量太大，翻页窗口内捞不到飞猪；
+     * 专查索引虽滞后几天，但飞猪线报本来就少，240h（10 天）窗口兜得住 */
+    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "10367", hours: 240, max: 150 },
     { key: "by", label: "淘宝百亿补贴", icon: "🛒", src: "wire", q: "10005", hours: 24, max: 200 },
     { key: "tb", label: "淘宝实时线报", icon: "📦", src: "wire", q: "10003", hours: 24, max: 200 },
     { key: "jd", label: "京东实时线报", icon: "🏷️", src: "wire", q: "10004", hours: 24, max: 200 },
