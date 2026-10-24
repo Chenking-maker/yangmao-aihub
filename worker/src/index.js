@@ -24,6 +24,7 @@ import {
   normalizeList, hdkSearch, hdkFeed, hdkRelink, hdkItemDetail, hdkXhdList, parsePastedLink,
   hdkActivityList, hdkConference, relayActivity, verifyActivities, withTimeout, pool,
   hdkWireCategories, hdkWireReport, hdkWireReportRecent, hdkMaterialCommunities, hdkMaterialItems,
+  hdkColumn,
   hdkMeituanActivities, hdkMeituanLink, normalizeMeituanActivity, normalizeLifeActivity,
   convertLink, proxyImage, dailyStats, bjDate, fixedLinks, extractLinkMaterial
 } from "./core.js";
@@ -594,9 +595,10 @@ async function warmup(env) {
     await heavySet("wn:list:0::12:50", await hdkWireReportRecent("0", 12, 50, 6000));
   } catch (e) { /* ignore */ }
   /* 飞猪旅行：分类专查接口索引滞后（慢 3 天），改从全量流筛，条目稀疏要翻更深，
-     所以单独预热，否则前台几秒预算只能捞到一两条 */
+     所以单独预热，否则前台几秒预算只能捞到一两条。
+     窗口 10 天（240h）：飞猪线报本来就不多，放宽到 10 天才有个基本的量 */
   try {
-    await heavySet("wn:list:0::飞猪旅行:168:100", await hdkWireReportRecent("0", 168, 100, 25000, "飞猪旅行"));
+    await heavySet("wn:list:0::飞猪旅行:240:150", await hdkWireReportRecent("0", 240, 150, 25000, "飞猪旅行"));
   } catch (e) { /* ignore */ }
   /* 其余三个实时分类也预热：首次点进对应 tab 同样是热缓存 */
   var wireTabs = [["10003", 24, 200], ["10004", 24, 200], ["10005", 24, 200]];
@@ -679,6 +681,31 @@ export default {
         return json(data);
       }
 
+      /* ---- 凑单补差推荐：按「差额」拉价格区间商品 ----
+       * gap=距下一档满减还差多少钱（前端算好传上来）。
+       * 取 [gap-15, gap+8] 区间的券后价商品（向下多留 15 元：加个稍便宜的也能达标，
+       * 向上 8 元：超一点点也能凑下一档），按券后价从高到低排，前端再挑最贴近的。
+       * 缓存 10 分钟：同一差额多人凑，拉一次全员用。 */
+      if (url.pathname === "/api/coutao/rec") {
+        if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
+        const gap = Math.min(Math.max(Number(url.searchParams.get("gap")) || 0, 0), 100000);
+        if (gap <= 0) return json({ items: [], gap: 0 });
+        const lo = Math.max(1, Math.round(gap - 15));
+        const hi = Math.round(gap + 8);
+        const key = "ct:" + lo + ":" + hi;
+        let data = cacheGet(key);
+        if (!data) {
+          /* 先试 type=1（今日上新，最新鲜）；今日上新池子小，高价窄区间常没数据，
+           * 空了就回退 type=2（全量大池），保证任何差额都有推荐 */
+          data = await hdkColumn(env, { type: 1, priceMin: lo, priceMax: hi, sort: 2, back: 20 });
+          if (!data.length) {
+            data = await hdkColumn(env, { type: 2, priceMin: lo, priceMax: hi, sort: 2, back: 20 });
+          }
+          cacheSet(key, data);
+        }
+        return json({ items: data, gap: gap, range: [lo, hi] });
+      }
+
       if (url.pathname === "/api/activities") {
         if (!env.HDK_APIKEY) return json({ error: "服务端未配置 HDK_APIKEY" }, 503);
         const kw = url.searchParams.get("q") || "";
@@ -749,11 +776,17 @@ export default {
             const tag = url.searchParams.get("tag") || "宠物";
             const comms = await hdkMaterialCommunities(tag);
             const items = [];
-            for (const c of comms.slice(0, 1)) {
+            const seen = {};
+            /* 每个社区取 10 条、按商品 ID 去重（好单库的社区之间会推同一批爆品） */
+            for (const c of comms) {
               const list = await hdkMaterialItems(c.id, 1);
-              items.push.apply(items, list.slice(0, 12));
+              for (const it of list.slice(0, 10)) {
+                if (it.id && seen[it.id]) continue;
+                if (it.id) seen[it.id] = 1;
+                items.push(it);
+              }
             }
-            data = { total: items.length, items: items };
+            data = { total: items.length, items: items, comms: comms.map(function (c) { return c.name; }) };
           }
           return data === null ? [] : data;
         };

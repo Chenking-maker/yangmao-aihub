@@ -36,6 +36,8 @@ LINK_PDD = ""
 LINK_DY = "https://z.douyin.com/JImh7NBm"
 # 京享红包口令（首页红包卡上可一键复制，去京东 APP 搜索领取）
 JD_RED_WORD = "限时福利295"
+# 淘宝双11 超级红包密令（淘宝 APP 搜索领取，首页弹窗/线报广场提示用）
+TB_RED_WORD = "粉丝红包13133"
 
 # ---- 京东联盟官方通道（自有账号直连 api.jd.com，彻底绕开好单库）----
 # 京东联盟的开放网关是公开的：用自己的 appKey / secretKey / siteId 就能转「任意」京东

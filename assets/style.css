@@ -692,9 +692,16 @@ footer { border-top: 1px solid var(--hairline); margin-top: 56px; background: va
 .wire-meta { max-width: 1120px; margin: 0 auto; padding: 12px 28px 0; font-size: 12px; color: var(--text-3); min-height: 18px; }
 
 /* 分类提示条：京东 tab 显京享红包密令，其余 tab 提醒先领红包 */
-.wire-tip { max-width: 1120px; margin: 0 auto; padding: 10px 28px 0; font-size: 12.5px; color: var(--text-2); }
-.wire-tip b { color: var(--red); font-weight: 600; }
-@media (max-width: 720px) { .wire-tip { padding-left: 16px; padding-right: 16px; } }
+/* 红包提示条：金渐变小条，醒目（原来是一行灰字，用户要求调醒目） */
+#wireTip {
+  max-width: 1064px; margin: 10px auto 0; padding: 10px 14px;
+  border-radius: var(--r-md); border: 1px solid #f0d9a8;
+  background: linear-gradient(100deg, #fff8e8, #ffeecd 60%, #ffe5c8);
+  font-size: 13px; color: #8a5a12; line-height: 1.6;
+  box-shadow: 0 1px 0 rgba(160, 120, 40, .06);
+}
+#wireTip b { color: #b8531a; font-weight: 700; }
+@media (max-width: 720px) { #wireTip { margin-left: 16px; margin-right: 16px; } }
 .wire-meta b { color: var(--text-2); font-weight: 600; }
 .wire-list { max-width: 1120px; margin: 0 auto; padding: 12px 28px 44px; display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; align-items: start; }
 .wire-card {
@@ -2120,3 +2127,137 @@ body.has-page-side.ps-closed .side-toggle:hover { left: 0; }
 .pg-modal-acts .pg-btn { flex: 1; padding: 9px 0; }
 
 .pg-mask[hidden] { display: none !important; }   /* 同 .pg-team：flex 会盖掉 hidden 属性 */
+
+/* ============================================================
+   v2.21 素材商品卡（宠物/美妆 tab）
+   素材接口返的是商品结构（没有线报的 lines/images），单独一套卡
+   ============================================================ */
+.mat-card { gap: 10px; }
+.mat-row { display: flex; gap: 11px; align-items: flex-start; }
+.mat-imgbox { position: relative; flex: none; }
+.mat-img { border-radius: var(--r-md); background: var(--surface-2); object-fit: cover; }
+.mat-img.noimg {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--text-3);
+}
+.mat-main { flex: 1; min-width: 0; }
+.mat-title {
+  font-size: 13.5px; line-height: 1.45; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  min-height: 2.9em;
+}
+.mat-price-line { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.mat-price { font-size: 17px; font-weight: 700; color: var(--red); font-variant-numeric: tabular-nums; }
+.mat-old { font-size: 12px; color: var(--text-3); text-decoration: line-through; }
+.mat-coupon {
+  font-size: 11px; padding: 1px 6px; border-radius: 4px;
+  background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border);
+}
+.mat-sub { font-size: 11.5px; color: var(--text-3); margin-top: 4px; }
+
+@media (max-width: 720px) {
+  .mat-title { font-size: 13px; }
+  .mat-price { font-size: 16px; }
+}
+
+/* ============================================================
+   v2.21 首页每日红包提醒弹窗（每天首次打开弹一次）
+   ============================================================ */
+.rp-pop-mask {
+  position: fixed; inset: 0; z-index: 950;
+  background: rgba(20, 16, 10, .5);
+  display: flex; align-items: center; justify-content: center;
+  padding: 22px;
+  animation: rpPopFade .18s ease;
+}
+@keyframes rpPopFade { from { opacity: 0; } to { opacity: 1; } }
+.rp-pop {
+  position: relative; width: 100%; max-width: 360px;
+  background: linear-gradient(180deg, #fffdf8, #fff 40%);
+  border: 1px solid #f0d9a8; border-radius: 20px;
+  padding: 24px 22px 20px;
+  box-shadow: 0 24px 60px rgba(80, 50, 10, .28);
+  animation: rpPopIn .22s cubic-bezier(.2, .9, .3, 1.2);
+}
+@keyframes rpPopIn { from { transform: translateY(16px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.rp-pop-close {
+  position: absolute; top: 10px; right: 12px;
+  width: 28px; height: 28px; border-radius: 50%;
+  color: #b8a275; font-size: 13px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s;
+}
+.rp-pop-close:hover { background: #f7eeda; color: #8a5a12; }
+.rp-pop-head {
+  font-size: 19px; font-weight: 800; letter-spacing: -0.01em;
+  background: linear-gradient(100deg, #d93832, #e8791a);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.rp-pop-sub { font-size: 12.5px; color: #9a8260; margin: 5px 0 16px; line-height: 1.5; }
+.rp-pop-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 12px; border-radius: 14px;
+  background: #fff; border: 1px solid #f2e3c2;
+  margin-bottom: 9px;
+}
+.rp-pop-logo {
+  flex: none; width: 38px; height: 38px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center; font-size: 19px;
+  background: linear-gradient(135deg, #ffe9d2, #ffd9b8);
+}
+.rp-pop-logo.jd { background: linear-gradient(135deg, #ffe1e1, #ffc9c9); }
+.rp-pop-body { flex: 1; min-width: 0; }
+.rp-pop-body b { display: block; font-size: 13.5px; color: #3d2c12; }
+.rp-pop-body span { display: block; font-size: 11px; color: #a8906e; margin-top: 1px; }
+.rp-pop-word {
+  display: inline-block; margin-top: 5px; padding: 2px 9px;
+  border-radius: 6px; background: #fff6e3; border: 1px dashed #e3b95e;
+  font-family: var(--font-mono); font-size: 13.5px; font-weight: 700; color: #b8531a;
+  letter-spacing: .4px;
+}
+.rp-pop-btn {
+  flex: none; padding: 7px 13px; border-radius: 999px;
+  background: linear-gradient(100deg, #ff7a45, #f04f2c); color: #fff;
+  font-size: 12.5px; font-weight: 700;
+  box-shadow: 0 3px 10px rgba(240, 79, 44, .3);
+  transition: transform .12s, box-shadow .15s;
+}
+.rp-pop-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(240, 79, 44, .36); }
+.rp-pop-btn.jd { background: linear-gradient(100deg, #f2534d, #d93832); box-shadow: 0 3px 10px rgba(217, 56, 50, .3); }
+.rp-pop-go {
+  width: 100%; margin-top: 6px; padding: 11px;
+  border-radius: 999px; font-size: 14px; font-weight: 700; color: #8a5a12;
+  background: linear-gradient(100deg, #ffe9c2, #ffdca3);
+  border: 1px solid #ecc984;
+  transition: filter .15s, transform .12s;
+}
+.rp-pop-go:hover { filter: brightness(1.04); transform: translateY(-1px); }
+
+/* 深色模式：弹窗保持金暖色（红包场景刻意不做暗色，和 .pg-banner 一个思路） */
+
+@media (max-width: 480px) {
+  .rp-pop-mask { padding: 16px; align-items: flex-end; }
+  .rp-pop { max-width: none; border-radius: 18px 18px 0 0; padding-bottom: 24px; }
+  @keyframes rpPopIn { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+}
+
+.rp-pop-mask[hidden] { display: none !important; }   /* display:flex 会盖掉 hidden 属性 */
+
+/* ============================================================
+   v2.21 凑单工具：平台满减预设（今年淘宝 200-25）
+   ============================================================ */
+.ct-presets {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  margin-top: 10px;
+}
+.ct-presets-label { font-size: 12px; color: var(--text-3); }
+.ct-preset {
+  padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  border: 1px solid var(--hairline-2); background: #fff; color: var(--text-2);
+  transition: all .16s;
+}
+.ct-preset:hover { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+.ct-preset.active {
+  background: var(--red); border-color: var(--red); color: #fff;
+  box-shadow: 0 2px 8px rgba(217, 56, 50, .22);
+}

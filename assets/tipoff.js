@@ -21,7 +21,7 @@
   /* 每个分类的窗口：hours=时间窗口（小时），max=最多保留条数 */
   var TABS = [
     { key: "all", label: "全部", icon: "🧩", src: "wire", q: "0", hours: 12, max: 50 },
-    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "0", cate: "飞猪旅行", hours: 168, max: 100 },
+    { key: "fz", label: "飞猪旅行", icon: "✈️", src: "wire", q: "0", cate: "飞猪旅行", hours: 240, max: 150 },
     { key: "by", label: "淘宝百亿补贴", icon: "🛒", src: "wire", q: "10005", hours: 24, max: 200 },
     { key: "tb", label: "淘宝实时线报", icon: "📦", src: "wire", q: "10003", hours: 24, max: 200 },
     { key: "jd", label: "京东实时线报", icon: "🏷️", src: "wire", q: "10004", hours: 24, max: 200 },
@@ -162,15 +162,20 @@
   function renderWireItem(it) {
     var card = document.createElement("div");
     card.className = "wire-card";
+    var isJd = it.platform === "京东";
     // 行结构：content=文字说明；item_id=淘口令 token（紧跟着商品描述出现）
     var linesHtml = "";
     (it.lines || []).forEach(function (l, idx) {
       var link = l.itemId || (l.text && hasLink(l.text) ? l.text : "");
       if (l.text) linesHtml += '<div class="wire-line">' + W.esc(l.text) + '</div>';
       if (link) {
+        /* 京东：审核没通时就是「直接打开」，文案别唬人说转链 */
+        var label = l.itemId && !l.text
+          ? (isJd ? "🏷️ 打开京东 · 直接买" : "🛒 获取购买链接")
+          : (isJd ? "🏷️ 打开京东" : "🔗 转我的链接");
         linesHtml += '<div class="wire-foot" data-i="' + idx + '">' +
           '<button class="wire-btn act-convert" data-text="' + encodeURIComponent(link) + '">' +
-          (l.itemId && !l.text ? "🛒 获取购买链接" : "🔗 转我的链接") + '</button></div>';
+          label + '</button></div>';
       }
     });
 
@@ -208,13 +213,27 @@
     card.querySelectorAll(".act-convert").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var text = decodeURIComponent(btn.getAttribute("data-text"));
+        /* 京东快路径：官方转链通道还没就绪（网站推广位审核中）时，u.jd.com 短链
+         * 本身就是京东官方入口、浏览器里能正常跳转 —— 直接打开，不等转链。
+         * 审核通过后 jdApi 变 true，这里自动回到转链流程。 */
+        if (it.platform === "京东" && !JD_READY) {
+          window.open(text, "_blank", "noopener");
+          W.toast("已打开京东链接 · 下单前记得领京享红包（搜 " + (RED_WORDS.jd || "限时福利295") + "）");
+          return;
+        }
         btn.disabled = true;
         btn.textContent = "获取中…";
         apiPost("/api/convert", { text: text }).then(function (r) {
           if (r && r.url) {
-            btn.textContent = "已获取 · 请打开";
             btn.disabled = false;
-            btn.onclick = function () { window.open(r.url, "_blank", "noopener"); };
+            if (r.converted) {
+              btn.textContent = "已获取 · 请打开";
+              btn.onclick = function () { window.open(r.url, "_blank", "noopener"); };
+            } else {
+              /* 没转成（京东审核中等）：链接照样能打开，文案说清楚 */
+              btn.textContent = it.platform === "京东" ? "🏷️ 打开京东 ›" : "🔗 打开链接 ›";
+              btn.onclick = function () { window.open(r.url, "_blank", "noopener"); };
+            }
             if (r.taoCode) {
               var copy = document.createElement("button");
               copy.className = "wire-btn ghost";
@@ -240,6 +259,70 @@
     // 图片三级降级：缩放图 → 代理 → 原图 → 隐藏
     card.querySelectorAll(".wire-img").forEach(function (img) {
       W.bindImgFallback(img, img.getAttribute("data-orig") || "", null, "");
+    });
+    return card;
+  }
+
+  /* ---- 素材商品卡（宠物/美妆 tab）：和线报完全不同的数据结构 ----
+   * 素材接口返的是商品 {id,title,pic,price,endPrice,coupon,couponUrl,shop,sales}，
+   * 没有 lines/images —— 直接走 renderWireItem 会渲染出空卡（用户反馈「不显示」的根因）。
+   * 「领券购买」拿 couponurl 去 /api/convert 转链，和线报商品走同一套通道。 */
+  function renderMaterialItem(it) {
+    var card = document.createElement("div");
+    card.className = "wire-card mat-card";
+    var img = it.pic
+      ? '<img class="wire-img mat-img" loading="lazy" decoding="async" width="88" height="88" ' +
+        'src="' + W.imgThumb(it.pic, 176) + '" data-orig="' + W.esc(it.pic) + '" referrerpolicy="no-referrer" alt="">'
+      : '<span class="wire-img mat-img noimg">图</span>';
+    var priceHtml =
+      '<span class="mat-price">¥' + (Math.round(Number(it.endPrice) * 100) / 100) + '</span>' +
+      (Number(it.price) > Number(it.endPrice) ? '<span class="mat-old">¥' + (Math.round(Number(it.price) * 100) / 100) + '</span>' : "") +
+      (it.coupon > 0 ? '<span class="mat-coupon">券 ¥' + it.coupon + '</span>' : "");
+    var sub = (it.shop ? W.esc(it.shop) + " · " : "") +
+      (it.sales >= 10000 ? "月销" + (Math.round(it.sales / 1000) / 10) + "万" : it.sales > 0 ? "月销" + it.sales : "");
+    card.innerHTML =
+      '<div class="mat-row">' +
+        '<div class="mat-imgbox">' + img + "</div>" +
+        '<div class="mat-main">' +
+          '<div class="mat-title">' + W.esc(it.title || "") + "</div>" +
+          '<div class="mat-price-line">' + priceHtml + "</div>" +
+          '<div class="mat-sub">' + sub + "</div>" +
+        "</div>" +
+      "</div>" +
+      '<div class="wire-foot">' +
+        '<button class="wire-btn act-convert" data-text="' + encodeURIComponent(it.couponUrl || ("https://item.taobao.com/item.htm?id=" + it.id)) + '">🛒 领券购买</button>' +
+      "</div>";
+    card.querySelectorAll(".wire-img").forEach(function (im) {
+      W.bindImgFallback(im, im.getAttribute("data-orig") || "", null, "");
+    });
+    /* 星标按钮（common.js 的 starBtn 返回按钮元素，追加到卡片右上角） */
+    card.querySelector(".mat-imgbox").appendChild(W.starBtn({
+      k: "m:" + it.id, type: "item", title: it.title || "", link: it.couponUrl || "",
+      pic: it.pic || "", platform: "淘宝", price: it.price || 0, endPrice: it.endPrice || 0,
+      coupon: it.coupon || 0, save: (Number(it.price) > Number(it.endPrice) ? Math.round((Number(it.price) - Number(it.endPrice)) * 10) / 10 : 0)
+    }));
+    card.querySelector(".act-convert").addEventListener("click", function () {
+      var btn = this;
+      var text = decodeURIComponent(btn.getAttribute("data-text"));
+      btn.disabled = true;
+      btn.textContent = "获取中…";
+      apiPost("/api/convert", { text: text }).then(function (r) {
+        btn.disabled = false;
+        if (r && r.url) {
+          btn.textContent = r.converted ? "已获取 · 请打开" : "🔗 打开链接 ›";
+          btn.onclick = function () { window.open(r.url, "_blank", "noopener"); };
+          if (r.taoCode) {
+            var copy = document.createElement("button");
+            copy.className = "wire-btn ghost";
+            copy.textContent = "复制淘口令";
+            copy.addEventListener("click", function () { W.copyText(r.taoCode, "淘口令已复制，打开淘宝自动识别"); });
+            btn.parentNode.insertBefore(copy, btn.nextSibling);
+          }
+          W.toast(r.note || "已获取你的专属优惠链接");
+        } else {
+          btn.textContent = "获取失败，重试";
+        }
+      }).catch(function () { btn.disabled = false; btn.textContent = "网络开小差，重试"; });
     });
     return card;
   }
@@ -306,9 +389,12 @@
 
   /* 一次几十上百条线报，分批渲染：先出 12 条，剩下的点「加载更多」。
    * 移动端首屏只出 12 条 —— 少一半 DOM 节点和图片请求，滚动照样顺畅。 */
-  function renderBatch(items, from) {
+  function renderBatch(items, from, tab) {
     var end = Math.min(items.length, from + WIRE_BATCH);
-    for (var i = from; i < end; i++) listEl.appendChild(renderWireItem(items[i]));
+    var isMat = tab && tab.src === "material";
+    for (var i = from; i < end; i++) {
+      listEl.appendChild(isMat ? renderMaterialItem(items[i]) : renderWireItem(items[i]));
+    }
     var old = $("wireMore");
     if (old) old.remove();
     if (end < items.length) {
@@ -316,7 +402,7 @@
       btn.className = "wire-more";
       btn.id = "wireMore";
       btn.textContent = "加载更多（还有 " + (items.length - end) + " 条）";
-      btn.addEventListener("click", function () { btn.remove(); renderBatch(items, end); });
+      btn.addEventListener("click", function () { btn.remove(); renderBatch(items, end, tab); });
       listEl.appendChild(btn);
     }
   }
@@ -338,7 +424,7 @@
     var items = (d && d.items) || [];
     if (!items.length) { showEmpty(tab); return; }
     paintMeta(tab, d);
-    renderBatch(items, 0);
+    renderBatch(items, 0, tab);
   }
 
   function loadList(tab, opts) {
@@ -390,16 +476,32 @@
     loadList(tab, { force: true });
   });
 
-  /* 分类提示条：京东 tab 显京享红包密令，其余 tab 提醒「先领红包再买」 */
+  /* 红包密令（从 /api/links 拿，改口令不用改前端） */
+  var RED_WORDS = { tb: "", jd: "" };
+  /* 京东联盟官方通道是否就绪（就绪 → 京东链接都能转成返利链接；
+   * 没就绪 → 走快路径直接打开，不再傻等转链） */
+  var JD_READY = false;
+  apiGet("/api/links").then(function (L) {
+    if (L && L.tbRedWord) RED_WORDS.tb = L.tbRedWord;
+    if (L && L.jdRedWord) RED_WORDS.jd = L.jdRedWord;
+    JD_READY = !!(L && L.jdApi);
+  }).catch(function () { /* 拿不到就用页面里的兜底文案 */ });
+
+  /* 分类提示条：淘宝系 tab 显超级红包密令、京东 tab 显京享红包密令，其余提醒「先领红包再买」。
+   * 口令是配置驱动的（wrangler.toml 的 TB_RED_WORD / JD_RED_WORD），拿不到时用兜底值。 */
   function paintTip(tab) {
     var el = $("wireTip");
     if (!el) return;
+    var tbw = RED_WORDS.tb || "粉丝红包13133";
+    var jdw = RED_WORDS.jd || "限时福利295";
     if (tab.key === "jd") {
-      el.innerHTML = '🧧 下单前先领 <b>京享红包</b>：京东搜密令「<b>限时福利295</b>」，红包和券一起用更便宜';
+      el.innerHTML = '🧧 下单前先领 <b>京享红包</b>：京东 APP 搜密令「<b>' + W.esc(jdw) + '</b>」，红包和券一起用更便宜';
     } else if (tab.key === "all" || tab.key === "by" || tab.key === "tb") {
-      el.innerHTML = '🧧 记得领了红包再买更省钱 —— 线报里的券，叠加上红包一起用更便宜';
+      el.innerHTML = '🧧 <b>先搜口令再买更划算</b> —— 淘宝 APP 搜「<b>' + W.esc(tbw) + '</b>」领超级红包，线报里的券叠加上红包一起用更便宜';
+    } else if (tab.key === "fz") {
+      el.innerHTML = '🧧 飞猪线报更新慢，这里保留最近 10 天 —— 领了红包再买更省钱';
     } else {
-      el.innerHTML = '🧧 记得领了红包再买更省钱';
+      el.innerHTML = '🧧 记得领了红包再买更省钱 —— 淘宝 APP 搜「<b>' + W.esc(tbw) + '</b>」领超级红包';
     }
   }
 

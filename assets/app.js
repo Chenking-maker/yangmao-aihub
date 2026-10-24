@@ -27,7 +27,7 @@
         "给爸妈买 200 元以内的纯牛奶",
         "9.9 包邮有什么值得买",
         "双11 超级红包怎么领",
-        "满200减20怎么凑单"
+        "满200减25怎么凑单"
       ]
     });
   }
@@ -213,6 +213,22 @@
   var jdFixed = "";
   var linkReady = apiGet("/api/links").then(function (L) {
     if (L && L.jdRed) jdFixed = L.jdRed;
+    var tbWord = (L && L.tbRedWord) || "粉丝红包13133";
+    var jdWord = (L && L.jdRedWord) || "限时福利295";
+    /* 淘宝超级红包口令按钮（和京东对称） */
+    var tbw = $("rpTbWordBtn");
+    if (tbw && L && L.tbRedWord) {
+      tbw.hidden = false;
+      tbw.textContent = L.tbRedWord + " · 点我复制口令";
+      tbw.addEventListener("click", function () {
+        W.copyText(L.tbRedWord, "口令已复制，打开淘宝 APP 搜索即可领红包");
+      });
+    }
+    /* 每日弹窗里的口令同步 */
+    var pt = $("rpPopTbWord"), pj = $("rpPopJdWord");
+    if (pt) pt.textContent = tbWord;
+    if (pj) pj.textContent = jdWord;
+    window.RP_WORDS = { tb: tbWord, jd: jdWord };
     var wb = $("rpJdWordBtn");
     if (wb && L && L.jdRedWord) {
       wb.hidden = false;
@@ -272,6 +288,54 @@
       bindJdBtn(null);
     }
   });
+
+  /* ---------- 每日红包提醒弹窗 ----------
+   * 规则：每天（北京时间 0 点刷新）首次打开首页弹一次，关掉/点「知道啦」都记当天日期。
+   * 用户主动关掉后当天不再烦他；口令从 /api/links 拿（拿不到用兜底值），
+   * 弹窗里两个「复制口令」一键复制，关了也能去首页红包区领。 */
+  (function dailyRedPopup() {
+    var mask = $("rpPopMask");
+    if (!mask) return;
+    var KEY = "ck_rp_pop_date";
+    var today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    try {
+      if (localStorage.getItem(KEY) === today) return;   // 今天已提醒过
+    } catch (e) { return; }                              // 隐私模式打不开存储就别弹
+
+    function close() {
+      mask.hidden = true;
+      try { localStorage.setItem(KEY, today); } catch (e) { /* 记不上就算了 */ }
+    }
+    $("rpPopClose").addEventListener("click", close);
+    $("rpPopGo").addEventListener("click", function () {
+      close();
+      /* 顺手滚到首页红包区，点「立即领取」直接进 */
+      var rp = $("redpacket");
+      if (rp && rp.scrollIntoView) rp.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    $("rpPopTbCopy").addEventListener("click", function () {
+      var w = (window.RP_WORDS && window.RP_WORDS.tb) || "粉丝红包13133";
+      W.copyText(w, "淘宝口令已复制，打开淘宝 APP 搜索即可领");
+    });
+    $("rpPopJdCopy").addEventListener("click", function () {
+      var w = (window.RP_WORDS && window.RP_WORDS.jd) || "限时福利295";
+      W.copyText(w, "京东口令已复制，打开京东 APP 搜索即可领");
+    });
+    /* 点遮罩空白处也能关 */
+    mask.addEventListener("click", function (e) { if (e.target === mask) close(); });
+
+    /* 等口令就绪再弹（避免弹出「undefined」）；0.8s 兜底：接口慢也先弹 */
+    var shown = false;
+    function show() {
+      if (shown) return;
+      shown = true;
+      mask.hidden = false;
+    }
+    Promise.race([
+      linkReady,
+      new Promise(function (r) { setTimeout(r, 800); })
+    ]).then(show);
+  })();
 
   /* ---------- 双11 日历 ---------- */
   var tl = $("timeline");

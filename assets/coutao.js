@@ -1,6 +1,6 @@
-/* 羊毛AIHUB · 凑单工具 v2.2（仿大淘客凑单交互）
+/* 羊毛AIHUB · 凑单工具 v2.21（今年规则：淘宝每满200减25）
  * 添加商品（粘贴链接解析 / 关键词搜索 / 手动）→ 已选列表算差额 → 智能补差推荐
- * 所有商品的领券购买统一走 /api/coupon（ratesurl 转链，带用户归因参数）
+ * 补差推荐走 /api/coutao/rec（服务端按差额向好单库商品筛选 API 要价格区间商品）
  * 已选列表持久化到 localStorage，刷新不丢
  */
 (function () {
@@ -31,8 +31,8 @@
   function fmt(n) { return (Math.round(Number(n) * 100) / 100).toFixed(1).replace(/\.0$/, ""); }
 
   /* ---------- 状态 ---------- */
-  var LS_KEY = "wool-coutao-v1";
-  var state = { items: [], rule: { per: 200, cut: 20 }, pool: [], poolLoaded: false, manualSeq: 0 };
+  var LS_KEY = "wool-coutao-v2";   // v2：今年规则改成 200-25，旧 key（200-20）不迁移
+  var state = { items: [], rule: { per: 200, cut: 25 }, pool: [], poolLoaded: false, manualSeq: 0 };
 
   function save() {
     try { localStorage.setItem(LS_KEY, JSON.stringify({ items: state.items, rule: state.rule })); } catch (e) {}
@@ -42,7 +42,7 @@
       var d = JSON.parse(localStorage.getItem(LS_KEY) || "null");
       if (d && Array.isArray(d.items)) {
         state.items = d.items;
-        if (d.rule) state.rule = { per: Number(d.rule.per) || 200, cut: Number(d.rule.cut) || 20 };
+        if (d.rule) state.rule = { per: Number(d.rule.per) || 200, cut: Number(d.rule.cut) || 25 };
       }
     } catch (e) {}
   }
@@ -168,6 +168,27 @@
     return el;
   }
 
+  /* 差额 → 商品推荐。
+   * v2.21 起改走 /api/coutao/rec：服务端拿「差额 ±」直接向好单库商品筛选 API 要
+   * 价格区间商品（v2 column 的 price_min/price_max），比原来拉两个固定榜单再本地
+   * 筛准得多（原来经常「推荐池里没匹配的」）。接口挂了才回退老推荐池。 */
+  function paintRec(s, items, tip, box) {
+    box.innerHTML = "";
+    var fits = items
+      .filter(function (p) { return Number(p.endPrice) > 0; })
+      /* 越贴近差额的排越前（刚好达标 > 差一点 > 超一点） */
+      .sort(function (a, b) {
+        return Math.abs(Number(a.endPrice) - s.gap) - Math.abs(Number(b.endPrice) - s.gap);
+      })
+      .slice(0, 8);
+    if (!fits.length) {
+      tip.textContent = "还差 ¥" + fmt(s.gap) + "，没挑到合适的，换个关键词搜着加 ›";
+      return;
+    }
+    tip.textContent = "还差 ¥" + fmt(s.gap) + " 拿满「每满 " + s.per + " 减 " + s.cut + "」，这些是挑好的补差商品（越靠前越刚好）：";
+    fits.forEach(function (p) { var c = recCard(p, s.gap); box.appendChild(c); bindCtImgs(c); });
+  }
+
   function renderRecommend() {
     var s = renderSummary();
     var box = $("ctRecList");
@@ -175,21 +196,23 @@
     box.innerHTML = "";
     if (!state.items.length) { tip.textContent = "加满产品后，这里按差额推荐刚好补差的商品。"; return; }
     if (s.gap <= 0) { tip.textContent = "已达标，满减拿满了 ✔ 想再买点啥可以继续加。"; return; }
-    if (!state.poolLoaded) {
-      tip.textContent = "推荐池加载中…";
-      loadPool();
-      return;
-    }
-    var fits = state.pool
-      .filter(function (p) { return Number(p.endPrice) > 0 && Number(p.endPrice) <= s.gap; })
-      .sort(function (a, b) { return Number(b.endPrice) - Number(a.endPrice); })
-      .slice(0, 8);
-    if (!fits.length) {
-      tip.textContent = "还差 ¥" + fmt(s.gap) + "，推荐池里没匹配的，换个关键词搜着加 ›";
-      return;
-    }
-    tip.textContent = "还差 ¥" + fmt(s.gap) + " 拿满「每满 " + s.per + " 减 " + s.cut + "」，这些商品刚好补差（按到手价从高到低）：";
-    fits.forEach(function (p) { var c = recCard(p, s.gap); box.appendChild(c); bindCtImgs(c); });
+    /* 同一差额直接用刚拉的结果，不重复请求 */
+    if (state.rec && state.rec.gap === s.gap) { paintRec(s, state.rec.items, tip, box); return; }
+    if (state.recLoading) { tip.textContent = "正在按差额挑商品…"; return; }
+    state.recLoading = true;
+    tip.textContent = "正在按差额挑商品…";
+    apiGet("/api/coutao/rec?gap=" + s.gap).then(function (d) {
+      state.recLoading = false;
+      var items = (d && d.items) || [];
+      state.rec = { gap: s.gap, items: items };
+      paintRec(s, items, tip, box);
+    }).catch(function () {
+      state.recLoading = false;
+      /* 接口挂了：回退老推荐池（本地按差额筛） */
+      if (!state.poolLoaded) { tip.textContent = "推荐池加载中…"; loadPool(); return; }
+      var fits = state.pool.filter(function (p) { return Number(p.endPrice) > 0 && Number(p.endPrice) <= s.gap; });
+      paintRec(s, fits, tip, box);
+    });
   }
 
   function loadPool() {
@@ -281,8 +304,32 @@
   });
 
   /* ---------- 规则变更 ---------- */
-  $("ctPer").addEventListener("input", function () { state.rule.per = Number(this.value) || 200; save(); renderRecommend(); });
-  $("ctCut").addEventListener("input", function () { state.rule.cut = Number(this.value) || 0; save(); renderRecommend(); });
+  function syncPresets() {
+    var per = Number($("ctPer").value) || 200, cut = Number($("ctCut").value) || 0;
+    document.querySelectorAll(".ct-preset").forEach(function (x) {
+      x.classList.toggle("active",
+        Number(x.getAttribute("data-per")) === per && Number(x.getAttribute("data-cut")) === cut);
+    });
+  }
+  $("ctPer").addEventListener("input", function () { state.rule.per = Number(this.value) || 200; save(); syncPresets(); renderRecommend(); });
+  $("ctCut").addEventListener("input", function () { state.rule.cut = Number(this.value) || 0; save(); syncPresets(); renderRecommend(); });
+
+  /* ---------- 平台预设（今年双11 各平台跨店满减，一键切换） ---------- */
+  document.querySelectorAll(".ct-preset").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var per = Number(btn.getAttribute("data-per")) || 200;
+      var cut = Number(btn.getAttribute("data-cut")) || 25;
+      $("ctPer").value = per;
+      $("ctCut").value = cut;
+      state.rule.per = per;
+      state.rule.cut = cut;
+      save();
+      document.querySelectorAll(".ct-preset").forEach(function (x) { x.classList.remove("active"); });
+      btn.classList.add("active");
+      renderRecommend();
+      toast("已切换：每满 " + per + " 减 " + cut + "（以会场实际规则为准）");
+    });
+  });
 
   function renderAll() { renderRows(); renderRecommend(); }
 
@@ -290,5 +337,6 @@
   load();
   $("ctPer").value = state.rule.per;
   $("ctCut").value = state.rule.cut;
+  syncPresets();
   renderAll();
 })();

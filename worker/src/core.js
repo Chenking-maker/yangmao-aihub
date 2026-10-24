@@ -8,6 +8,7 @@
 import { jdUniversal, jdReady } from "./jd.js";
 
 export const HDK_BASE = "https://v3.api.haodanku.com";
+export const HDK_BASE2 = "https://v2.api.haodanku.com";
 export const HDK_WWW = "https://www.haodanku.com";
 export { jdReady };
 
@@ -48,6 +49,34 @@ export async function hdkFeed(env, type, back) {
     "&type=" + (type || 2) + "&back=" + back;
   var res = await fetch(url);
   return normalizeList(await res.json());
+}
+
+/* 凑单补差专用：按「券后价区间」筛商品（好单库商品筛选 API，v2 才有 price_min/price_max，
+ * v3 的同名接口会忽略价格参数直接返 code 0，别改回 v3）。
+ * sort=1 券后价从低到高，方便前端挑「最贴近差额」的那几个。
+ * type=1 今日上新（当天新券商品，凑单场景最新鲜）。 */
+export async function hdkColumn(env, opts) {
+  opts = opts || {};
+  /* ⚠️ v2 column 的 back 只接受离散值（1,2,5,10,20,50,100,120,200,500,1000），
+   * 传 30 之类会直接 code 0 报错（"back参数请在...选择其一"），必须吸附到合法档位 */
+  var ALLOWED_BACK = [1, 2, 5, 10, 20, 50, 100, 120, 200, 500, 1000];
+  var want = Number(opts.back) || 20;
+  var back = ALLOWED_BACK[0];
+  for (var i = 0; i < ALLOWED_BACK.length; i++) {
+    if (ALLOWED_BACK[i] >= want) { back = ALLOWED_BACK[i]; break; }
+    back = ALLOWED_BACK[ALLOWED_BACK.length - 1];
+  }
+  var url = HDK_BASE2 + "/column?apikey=" + encodeURIComponent(env.HDK_APIKEY) +
+    "&type=" + (opts.type || 1) + "&back=" + back + "&min_id=" + (opts.minId || 1) +
+    "&sort=" + (opts.sort === undefined ? 1 : opts.sort);
+  if (opts.priceMin > 0) url += "&price_min=" + Math.floor(opts.priceMin);
+  if (opts.priceMax > 0) url += "&price_max=" + Math.ceil(opts.priceMax);
+  if (opts.cid) url += "&cid=" + opts.cid;
+  var res = await fetch(url);
+  var json = await res.json();
+  /* v2 的 column 成功码是 1（不是 200） */
+  if (!json || json.code !== 1) return [];
+  return normalizeList(json);
 }
 
 /* 商品详情：按商品 ID 取标题/价格/主图（凑单工具解析用户粘贴的链接用） */
@@ -300,6 +329,7 @@ export function fixedLinks(env) {
     pdd: env.LINK_PDD || "",
     dy: env.LINK_DY || "",
     jdRedWord: env.JD_RED_WORD || "",
+    tbRedWord: env.TB_RED_WORD || "",
     channel: hdkChannel(env),
     jdApi: jdReady(env)     // 京东联盟官方通道是否就绪（就绪则京东所有链接都能自动转）
   };
@@ -662,20 +692,54 @@ export async function hdkMaterialTags() {
   return list.map(function (t) { return t.name; });
 }
 
-/* 按标签取素材圈子（宠物/美妆…），优先 choice=1 的推荐圈 */
+/* 每个标签对应的社区名关键词。
+ * ⚠️ 踩坑：上游 getCommunityList 的 tag 参数**基本失效** —— 实测「宠物」和「美妆」
+ * 返回同一个 64 个社区的列表（连 choice=1 的第一个都一样），只有「母婴/线报」有区分，
+ * 且还分桌面/移动 UA 两套排序。所以不能信 tag，要按**社区名字**自己认：
+ * 宠物 → 找名字带「宠物/猫/狗/萌宠」的圈；美妆 → 找「美妆/护肤/口红/种🌿」的圈。
+ * 名字对上了，圈里的商品才是真对口的（实测宠物圈出红狗营养膏/猫砂，美妆圈出 OLAY/面膜）。 */
+var MATERIAL_KW = {
+  "宠物": ["宠物", "猫", "狗", "萌宠"],
+  "美妆": ["美妆", "护肤", "口红", "彩妆", "种🌿", "种草"],
+  "母婴": ["母婴", "孕婴", "宝宝", "婴儿"]
+};
+/* 每个标签最多合并几个社区（商品去重后凑够一屏） */
+var MATERIAL_COMMS = { "宠物": 2, "美妆": 2, "母婴": 2 };
+
+/* 按标签取素材圈子：先按社区名关键词挑对口的，挑不到再退回 choice=1 的推荐圈 */
 export async function hdkMaterialCommunities(tag) {
   var url = HDK_WWW + "/CommunityMaterial/getCommunityList?type=1&page=1&tag=" + encodeURIComponent(tag);
   var res = await fetch(url, { headers: { "x-requested-with": "XMLHttpRequest" } });
   var json = await res.json();
   var list = json && json.data && json.data.list ? json.data.list : [];
+  var kws = MATERIAL_KW[tag] || [];
+  var want = MATERIAL_COMMS[tag] || 2;
+
+  /* ① 名字带关键词的圈优先，按在架商品数从多到少（商品多的圈内容更丰富） */
+  var named = list.filter(function (c) {
+    var n = String(c.show_name || "");
+    return kws.some(function (k) { return n.indexOf(k) > -1; });
+  }).sort(function (a, b) { return (b.item_count || 0) - (a.item_count || 0); });
+
+  /* ② 推荐圈（choice=1）垫后；
+     ③ 都没有就整个列表兜底 */
   var picked = list.filter(function (c) { return c.choice === 1; });
-  var pool = picked.length ? picked : list;
-  return pool.slice(0, 2).map(function (c) {
-    return { id: c.community_id, name: c.show_name };
-  });
+  var pool = named.concat(picked);
+  if (!pool.length) pool = list;
+
+  var out = [], seen = {};
+  for (var i = 0; i < pool.length && out.length < want; i++) {
+    var cid = pool[i].community_id;
+    if (!cid || seen[cid]) continue;
+    seen[cid] = 1;
+    out.push({ id: cid, name: pool[i].show_name });
+  }
+  return out;
 }
 
-/* 圈子内商品列表（淘系 token 物料，可走 ratesurl 转链） */
+/* 圈子内商品列表（淘系 token 物料，可走 ratesurl 转链）。
+ * 带上 couponurl（uland 券链接）和店铺/销量：前端卡片要展示，
+ * 「领券购买」直接拿 couponurl 去 /api/convert 转链。 */
 export async function hdkMaterialItems(communityId, page) {
   var url = HDK_WWW + "/CommunityMaterial/getItemListByCommunityId?community_id=" +
     encodeURIComponent(communityId) + "&page=" + (page || 1);
@@ -686,10 +750,14 @@ export async function hdkMaterialItems(communityId, page) {
     return {
       id: it.item_id || "",
       title: it.itemtitle || it.itemshorttitle || "",
+      shortTitle: it.itemshorttitle || "",
       pic: it.itempic || "",
       price: it.itemprice || "0",
       endPrice: it.itemendprice || it.itemprice || "0",
       coupon: Number(it.couponmoney || 0),
+      couponUrl: it.couponurl || "",
+      shop: it.shopname || "",
+      sales: Number(it.itemsale || 0),
       time: it.create_at || 0
     };
   });
@@ -890,7 +958,9 @@ export async function convertLink(env, text) {
       };
     }
     var jdFallback = rawUrl || (m.materialId.indexOf("http") === 0 ? m.materialId : "");
-    /* 把「为什么没转成」用最短的一句讲清楚（完整排查步骤在 /api/health?deep=1 的探针里） */
+    /* 京东官方转链卡在「网站推广位审核」（2001703）时，u.jd.com 短链本身是京东官方
+     * 生成的入口，浏览器里能正常跳转 —— 所以文案不能说「用不了」，而是「先直接打开，
+     * 审核通过后同一条链接自动升级成返利链接」。完整排查在 /api/health?deep=1。 */
     var why = "";
     if (jdReason && !/未配置/.test(jdReason)) {
       why = "（" + String(jdReason).split("。")[0].slice(0, 42) + "）";
@@ -901,7 +971,7 @@ export async function convertLink(env, text) {
       url: jdFallback,
       couponUrl: m.couponUrl,
       note: (jdFallback
-        ? "这条京东链接暂时走不了优惠通道，先给你打开原链接" + why
+        ? "京东链接可以直接打开，下单前记得领京享红包" + why + "；返利通道升级后自动生效"
         : "这条京东链接暂时转不了，换一个试试" + why)
     };
   }
