@@ -164,6 +164,53 @@
     };
   }
 
+  /* 整段复制：文字行 + 淘口令 token 都带上，图片不要（用户要的是「复制文字」） */
+  var COPY_ICO = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  function wireCopyText(it) {
+    var parts = [];
+    (it.lines || []).forEach(function (l) {
+      if (l.text) parts.push(String(l.text));
+      if (l.itemId) parts.push(String(l.itemId));
+    });
+    return parts.join("\n");
+  }
+  function legacyCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.left = "-999px"; ta.style.top = "0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    return ok;
+  }
+  function copyPlain(text, ok, fail) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { ok && ok(); }, function () {
+        legacyCopy(text) ? ok() : fail();
+      });
+    } else {
+      legacyCopy(text) ? ok() : fail();
+    }
+  }
+  function wireCopyBtn(it) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "wire-copy-btn";
+    b.title = "复制整段文字（含口令，不含图片）";
+    b.innerHTML = COPY_ICO + "<span>复制</span>";
+    b.addEventListener("click", function (e) {
+      e.preventDefault(); e.stopPropagation();
+      var text = wireCopyText(it);
+      if (!text) { W.toast("这条没有可复制的文字"); return; }
+      copyPlain(text,
+        function () { W.toast("已复制整段文字，粘贴给好友或备忘录都行"); },
+        function () { W.toast("复制失败，长按文字手动选一下吧"); });
+    });
+    return b;
+  }
+
   function renderWireItem(it) {
     var card = document.createElement("div");
     card.className = "wire-card";
@@ -202,9 +249,12 @@
       '<div class="wire-lines">' + linesHtml + '</div>' +
       imgsHtml;
 
-    // ① 整条线报的星标（右侧「实时线报」）
+    // ① 整条线报的星标 + 整段复制（右侧「实时线报」）
     var top = card.querySelector(".wire-card-top");
-    if (top) top.appendChild(W.starBtn(wireStarItem(it)));
+    if (top) {
+      top.appendChild(W.starBtn(wireStarItem(it)));
+      top.appendChild(wireCopyBtn(it));
+    }
 
     // ② 每个商品链接单独一个星标（「线报好物」）—— 点开就能转链打开
     var links = wireLinks(it);

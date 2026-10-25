@@ -59,6 +59,14 @@
     var key = p.id || ("m" + (++state.manualSeq));
     for (var i = 0; i < state.items.length; i++) {
       if ((state.items[i].id || state.items[i].key) === key) {
+        /* 购物车总价条目：重复提交 = 更新价格，不是加数量 */
+        if (state.items[i].virtual) {
+          state.items[i].endPrice = p.endPrice;
+          state.items[i].price = p.endPrice;
+          save(); renderAll();
+          if (!silent) toast("购物车总价已更新为 ¥" + fmt(p.endPrice));
+          return;
+        }
         state.items[i].qty = (Number(state.items[i].qty) || 1) + 1;
         save(); renderAll();
         if (!silent) toast("已在列表里，数量 +1");
@@ -74,6 +82,7 @@
       endPrice: p.endPrice || p.price || "0",
       coupon: Number(p.coupon) || 0,
       manual: !!p.manual,
+      virtual: !!p.virtual,
       qty: 1
     };
     state.items.push(item);
@@ -91,19 +100,24 @@
     }
     state.items.forEach(function (it, idx) {
       var row = document.createElement("div");
-      row.className = "ct-row" + (it.manual ? " manual" : "");
+      row.className = "ct-row" + (it.manual ? " manual" : "") + (it.virtual ? " virtual" : "");
       var img = it.pic
         ? '<img class="ct-img" width="48" height="48" src="' + W.imgThumb(it.pic, 112) + '" data-orig="' + W.esc(it.pic) + '" referrerpolicy="no-referrer" alt="">'
-        : '<span class="ct-row-noimg">图</span>';
+        : '<span class="ct-row-noimg">' + (it.virtual ? "🛒" : "图") + '</span>';
+      /* 购物车总价条目：价格直接可改，不用删了重填 */
+      var priceHtml = it.virtual
+        ? '<span class="ct-cart-edit-wrap">¥<input type="number" min="0" step="0.01" value="' + (Number(it.endPrice) || 0) + '" class="ct-cart-edit" title="改购物车总价"></span>'
+        : '<span class="ct-row-now">¥' + fmt(it.endPrice) + '</span>' +
+          (Number(it.price) > Number(it.endPrice) ? '<span class="ct-row-old">¥' + fmt(it.price) + '</span>' : "") +
+          (it.coupon > 0 ? '<span class="ct-row-coupon">券 ¥' + it.coupon + '</span>' : "");
+      var tagHtml = it.virtual
+        ? '<span class="ct-row-tag cart">总价</span>'
+        : (it.manual ? '<span class="ct-row-tag">手动</span>' : "");
       row.innerHTML =
         '<div class="ct-row-img">' + img + '</div>' +
         '<div class="ct-row-main">' +
-          '<div class="ct-row-title">' + esc(it.title) + (it.manual ? '<span class="ct-row-tag">手动</span>' : "") + '</div>' +
-          '<div class="ct-row-price">' +
-            '<span class="ct-row-now">¥' + fmt(it.endPrice) + '</span>' +
-            (Number(it.price) > Number(it.endPrice) ? '<span class="ct-row-old">¥' + fmt(it.price) + '</span>' : "") +
-            (it.coupon > 0 ? '<span class="ct-row-coupon">券 ¥' + it.coupon + '</span>' : "") +
-          '</div>' +
+          '<div class="ct-row-title">' + esc(it.title) + tagHtml + '</div>' +
+          '<div class="ct-row-price">' + priceHtml + '</div>' +
         '</div>' +
         '<div class="ct-row-qty">' +
           '<button class="ct-qty-btn" data-act="minus">−</button>' +
@@ -124,6 +138,14 @@
         var v = Math.max(1, Math.floor(Number(this.value) || 1));
         it.qty = v; save(); renderAll();
       });
+      var edit = row.querySelector(".ct-cart-edit");
+      if (edit) {
+        edit.addEventListener("change", function () {
+          var v = Math.max(0, Number(this.value) || 0);
+          it.endPrice = v; it.price = v; save(); renderAll();
+          toast("购物车总价已更新为 ¥" + fmt(v));
+        });
+      }
       box.appendChild(row);
       bindCtImgs(row);
     });
@@ -236,25 +258,79 @@
     });
   }
 
-  /* ---------- 添加商品：解析 / 搜索 / 手动 ---------- */
+  /* ---------- 添加商品：购物车总价 / 解析 / 搜索 / 手动 ---------- */
+
+  /* 购物车总价模式：填个数就行，差额计算、补差推荐全部复用现有链路 */
+  $("ctCartBtn").addEventListener("click", function () {
+    var v = Number($("ctCartTotal").value) || 0;
+    if (v <= 0) { toast("先填购物车总价"); $("ctCartTotal").focus(); return; }
+    addItem({ id: "__cart", title: "购物车总价", endPrice: v, price: v, manual: true, virtual: true });
+    $("ctCartTotal").value = "";
+  });
+  $("ctCartTotal").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") $("ctCartBtn").click();
+  });
+
+  /* 从粘贴文本里提取商品名（剃 URL/口令/【标签】，与 AI 对话同款逻辑的精简版） */
+  function extractName(text) {
+    var s = String(text || "");
+    s = s.replace(/https?:\/\/\S+/g, " ");
+    s = s.replace(/[\u4e00-\u9fa5A-Za-z0-9]{0,4}[A-Za-z0-9]{4,14}\/[A-Za-z0-9]{5,24}\/?\s*(?::\/\/)?[\s\S]{0,18}?,?\s*打[\u958b\u5f00]\/?/g, " ");
+    s = s.replace(/[\u20a3\u00a3\u00a5\uffe5$\u20ac][^\s\u20a3\u00a3\u00a5\uffe5$\u20ac]{5,40}[\u20a3\u00a3\u00a5\uffe5$\u20ac]/g, " ");
+    s = s.replace(/\u301a[^\u301a\u301b]{1,40}\u301b/g, " ");
+    var segs = s.split(/[\s,\uff0c\u3002\u3001!!\uff1f??;;\u3010\u3011~\u301c|]+/).filter(function (x) {
+      return x && x.length >= 4 && /[\u4e00-\u9fa5]/.test(x) && x.replace(/[0-9.\s]/g, "").length >= 3;
+    });
+    return segs.length ? segs.sort(function (a, b) { return b.length - a.length; })[0].slice(0, 40) : "";
+  }
+  /* 从粘贴文本里提取价格数字（到手价/券面额/XX 元，取第一个合理的） */
+  function extractPrice(text) {
+    var s = String(text || "");
+    var m = s.match(/\u5230\u624b\u4ef7\u3010?\s*[:\uff1a]?\s*[\u00a5\uffe5]?\s*(\d+(?:\.\d{1,2})?)/) ||
+      s.match(/[\u00a5\uffe5]\s*(\d+(?:\.\d{1,2})?)\s*\u5143/) ||
+      s.match(/(\d+(?:\.\d{1,2})?)\s*\u5143/);
+    if (m && Number(m[1]) > 0.5) return Number(m[1]);
+    return 0;
+  }
+
   $("ctParseBtn").addEventListener("click", function () {
     var raw = $("ctPaste").value.trim();
-    if (!raw) { toast("先粘贴淘宝链接或淘口令"); return; }
-    var lines = raw.split(/\s+/).filter(Boolean).slice(0, 10);
+    if (!raw) { toast("先粘贴淘宝商品链接"); return; }
+    /* 按换行拆（一段一个商品）——不能按空格拆：整段分享文案里
+     * 「商品名【包邮】 【到手价】 534.00 元 口令」一按空格就碎，
+     * 价格和名称会被拆到不同行，兜底提取就废了 */
+    var lines = raw.split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 10);
     var btn = this;
     btn.disabled = true; btn.textContent = "解析中…";
-    var done = 0, added = 0, failed = 0;
+    var done = 0, added = 0, failed = 0, priceAdded = 0;
     lines.forEach(function (line) {
       apiPost("/api/parse", { text: line }).then(function (r) {
         if (r && r.title && !r.manual) { addItem(r, true); added++; }
-        else if (r && r.manual) { failed++; toast(r.note || "这条识别不了，用手动添加"); }
+        else {
+          /* 解析失败兜底：整段文案（线报/分享文本）里抠「到手价」和商品名，
+           * 按手动条目加入——手机复制的短链/口令解析不出商品 ID，但价格能用 */
+          var price = extractPrice(line);
+          var name = extractName(line);
+          if (price > 0) {
+            addItem({ id: "", title: name || "粘贴的商品", endPrice: price, price: price, manual: true }, true);
+            priceAdded++;
+          } else failed++;
+        }
+      }).catch(function () {
+        var price = extractPrice(line);
+        var name = extractName(line);
+        if (price > 0) { addItem({ id: "", title: name || "粘贴的商品", endPrice: price, price: price, manual: true }, true); priceAdded++; }
         else failed++;
-      }).catch(function () { failed++; })
+      })
         .then(function () {
           if (++done >= lines.length) {
             btn.disabled = false; btn.textContent = "解析添加";
             $("ctPaste").value = "";
-            toast(added ? "解析完成：加入 " + added + " 件" + (failed ? "，" + failed + " 条没识别" : "") : "一条都没识别出来，检查链接或用手动添加");
+            var msg = [];
+            if (added) msg.push("解析加入 " + added + " 件");
+            if (priceAdded) msg.push("按文案到手价加入 " + priceAdded + " 件");
+            if (failed) msg.push(failed + " 条没识别（短链/口令解析不出商品，可用购物车总价或手动添加）");
+            toast(msg.join("，") || "一条都没识别出来");
           }
         });
     });

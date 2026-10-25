@@ -12,13 +12,78 @@
     ? "http://127.0.0.1:8790"
     : "https://yangmao-aihub.370542303.workers.dev"; // Cloudflare Worker（2026-10-16 已部署）
 
-  function apiGet(p) { return fetch(API_BASE + p).then(function (r) { return r.json(); }); }
+  /* ---------- 网络层加固：fetch 超时 + 国内访问诊断横幅 ----------
+   * workers.dev / GitHub Pages 在国内运营商网络下时通时断，fetch 失败或
+   * 挂起都会让页面「空卡死」。这里统一加 9s 超时；连续 2 次网络失败就
+   * 弹出诊断横幅（每天最多一次，可手动重试/关闭），别让用户对着空页面发懵。 */
+  function fetchTimeout(url, opts, ms) {
+    ms = ms || 9000;
+    return new Promise(function (resolve, reject) {
+      var ac = null, done = false;
+      try { ac = new AbortController(); } catch (e) {}
+      var t = setTimeout(function () {
+        if (!done) { done = true; if (ac) try { ac.abort(); } catch (e) {} reject(new Error("timeout")); }
+      }, ms);
+      var o = opts || {};
+      if (ac) o.signal = ac.signal;
+      fetch(url, o).then(function (r) {
+        if (!done) { done = true; clearTimeout(t); resolve(r); }
+      }, function (e) {
+        if (!done) { done = true; clearTimeout(t); reject(e); }
+      });
+    });
+  }
+  var netFailStreak = 0;
+  function netFail() {
+    netFailStreak++;
+    if (netFailStreak < 2) return;
+    netFailStreak = 0;
+    showNetBanner();
+  }
+  function netOk() { netFailStreak = 0; hideNetBanner(); }
+  var netBannerInited = false;
+  function ensureNetBanner() {
+    if (netBannerInited) return;
+    netBannerInited = true;
+    if (document.getElementById("netBanner")) return;
+    var today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem("ck_net_banner_date") === today) return;   // 每天最多烦一次
+    var el = document.createElement("div");
+    el.className = "net-banner";
+    el.id = "netBanner";
+    el.setAttribute("role", "alert");
+    el.innerHTML =
+      '<div class="net-banner-ico">📡</div>' +
+      '<div class="net-banner-txt"><b>数据加载失败</b>' +
+      '<span>国内网络访问本服务偶有波动 —— 切换 WiFi／流量、改用系统浏览器打开、或稍后再试，一般就能恢复</span></div>' +
+      '<button class="net-banner-btn" type="button">重试</button>' +
+      '<button class="net-banner-close" type="button" aria-label="关闭">✕</button>';
+    document.body.appendChild(el);
+    el.querySelector(".net-banner-btn").addEventListener("click", function () { location.reload(); });
+    el.querySelector(".net-banner-close").addEventListener("click", function () {
+      localStorage.setItem("ck_net_banner_date", today);
+      hideNetBanner();
+    });
+  }
+  function showNetBanner() {
+    ensureNetBanner();
+    var el = document.getElementById("netBanner");
+    if (el) el.hidden = false;
+  }
+  function hideNetBanner() {
+    var el = document.getElementById("netBanner");
+    if (el) el.hidden = true;
+  }
+
+  function apiGet(p) {
+    return fetchTimeout(API_BASE + p).then(function (r) { netOk(); return r.json(); }, function (e) { netFail(); throw e; });
+  }
   function apiPost(p, b) {
-    return fetch(API_BASE + p, {
+    return fetchTimeout(API_BASE + p, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(b || {})
-    }).then(function (r) { return r.json(); });
+    }).then(function (r) { netOk(); return r.json(); }, function (e) { netFail(); throw e; });
   }
 
   /* Logo：小羊 + 掉钱 + 带电 AI 徽章（寓意：装了 AI 的羊毛，更省钱更赚钱） */
@@ -342,10 +407,50 @@
   }
 
   /* ================= 顶部导航 ================= */
+  /* ================= 手机端导航抽屉（≤900px） =================
+   * 桌面：侧栏静态展开/收起（side-toggle 拉手 + ps-closed）。
+   * 手机：侧栏改 fixed 抽屉，顶栏汉堡按钮开关，scrim 点哪关哪；
+   *       抽屉里点任意链接自动收起（锚点跳转也顺手关）。 */
+  var BURGER_ICO = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+  function initSideDrawer() {
+    var body = document.body;
+    /* index 页没有 scrim，补一个（复用 .side-scrim 样式） */
+    if (!document.querySelector(".side-scrim")) {
+      body.insertAdjacentHTML("afterbegin", '<div class="side-scrim" id="sideScrim"></div>');
+    }
+    var scrim = document.querySelector(".side-scrim");
+    var burger = document.getElementById("navBurger");
+    function isNarrow() { return window.matchMedia("(max-width: 900px)").matches; }
+    function setSide(open) {
+      body.classList.toggle("ps-closed", !open);
+      var btn = document.getElementById("sideToggle");
+      if (btn) {
+        btn.innerHTML = open
+          ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'
+          : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+      }
+      if (burger) burger.classList.toggle("on", open);
+    }
+    if (isNarrow()) body.classList.add("ps-closed");   // 窄屏默认收起（抽屉态）
+    if (burger) burger.addEventListener("click", function () {
+      setSide(body.classList.contains("ps-closed"));
+    });
+    if (scrim) scrim.addEventListener("click", function () { body.classList.add("ps-closed"); if (burger) burger.classList.remove("on"); });
+    /* 抽屉里点链接 → 窄屏自动收起 */
+    body.addEventListener("click", function (e) {
+      var a = e.target.closest ? e.target.closest(".sidebar a, .page-sidebar a") : null;
+      if (a && isNarrow()) { body.classList.add("ps-closed"); if (burger) burger.classList.remove("on"); }
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "[" || e.key === "【") setSide(body.classList.contains("ps-closed"));
+    });
+  }
+
   function buildTopnav(active) {
     var nav = $("topnav");
     if (!nav) return;
     nav.innerHTML =
+      '<button class="nav-burger" id="navBurger" type="button" aria-label="打开导航菜单" title="导航菜单">' + BURGER_ICO + '</button>' +
       '<a class="nav-brand" href="index.html">' + LOGO_SVG + '<span>羊毛AIHUB</span></a>' +
       '<nav class="nav-links">' +
         '<a class="rp-mini" id="rpMini" title="领取淘宝双11超级红包">🧧 超级红包</a>' +
@@ -356,6 +461,7 @@
       '</nav>';
     var rmp = $("rpMini");
     if (rmp) rmp.addEventListener("click", function () { openTbRedpacket(); });
+    initSideDrawer();
   }
 
   /* ================= 红包 / 会场 ================= */

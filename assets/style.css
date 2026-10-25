@@ -2315,3 +2315,144 @@ body.has-page-side.ps-closed .side-toggle:hover { left: 0; }
   .wire-search-box input { font-size: 13px; }
   .wire-search button { height: 37px; padding: 0 15px; font-size: 13px; }
 }
+
+/* ============================================================
+   v2.25 凑单工具：购物车总价快捷模式 + 虚拟条目
+   ============================================================ */
+.ct-cart {
+  background: linear-gradient(128deg, #fffaf4 0%, #fff6ea 60%, #ffefdb 100%);
+  border: 1px solid #f0d9a8;
+  border-radius: 12px;
+  padding: 13px 15px 14px;
+  margin-bottom: 14px;
+}
+.ct-cart-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.ct-cart-title { font-size: 14px; font-weight: 700; color: #8a5a12; }
+.ct-cart-note { font-size: 12px; color: #a4762f; }
+.ct-cart-row { display: flex; align-items: center; gap: 10px; }
+.ct-cart-field {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  height: 42px; padding: 0 14px;
+  background: #fff; border: 1px solid #e8c98f; border-radius: 999px;
+  transition: border-color .16s, box-shadow .16s;
+}
+.ct-cart-field:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-bg); }
+.ct-cart-yen { font-size: 15px; font-weight: 700; color: #8a5a12; flex-shrink: 0; }
+.ct-cart-field input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  font-size: 15px; color: var(--text-1);
+}
+.ct-cart-field input::placeholder { color: var(--text-3); font-size: 13px; }
+.ct-cart-row .ct-btn { height: 42px; padding: 0 22px; font-size: 14px; }
+
+/* 已选列表里的「购物车总价」虚拟条目 */
+.ct-row.virtual { background: linear-gradient(128deg, #fffdf8, #fff8ec); border-color: #f0d9a8; }
+.ct-row.virtual .ct-row-title { font-weight: 600; }
+.ct-row-tag.cart { background: #f6c544; color: #5c4300; }
+.ct-cart-edit-wrap { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; color: var(--red); }
+.ct-cart-edit {
+  width: 84px; border: none; border-bottom: 1px dashed #e8c98f; background: transparent;
+  font-size: 15px; font-weight: 700; color: var(--red); outline: none; padding: 2px 4px;
+}
+.ct-cart-edit:focus { border-bottom-color: var(--red); }
+@media (max-width: 640px) {
+  .ct-cart { padding: 12px 13px 13px; }
+  .ct-cart-row .ct-btn { height: 40px; padding: 0 16px; }
+  .ct-cart-field { height: 40px; }
+}
+
+/* ============================================================
+   v2.25 线报卡：整段复制按钮（星标旁）
+   ============================================================ */
+.wire-copy-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 24px; padding: 0 9px; margin-left: 6px;
+  border: 1px solid var(--hairline-2); border-radius: 999px;
+  background: #fff; color: var(--text-2);
+  font-size: 11.5px; line-height: 1; cursor: pointer;
+  transition: color .16s, border-color .16s, transform .1s;
+}
+.wire-copy-btn:hover { color: var(--red); border-color: var(--red); }
+.wire-copy-btn:active { transform: scale(.94); }
+.wire-copy-btn svg { flex-shrink: 0; }
+
+/* ============================================================
+   v2.25 手机端导航：汉堡按钮 + 侧栏抽屉（替换原横向滚动条）
+   ============================================================ */
+.nav-burger {
+  display: none; flex-shrink: 0;
+  width: 36px; height: 36px; margin-left: -6px;
+  align-items: center; justify-content: center;
+  border: none; border-radius: var(--r-sm);
+  background: transparent; color: var(--text-2);
+  cursor: pointer; transition: background .15s, color .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-burger:active { background: var(--surface-2); color: var(--text); }
+.nav-burger.on { color: var(--red); }
+@media (max-width: 900px) {
+  .nav-burger { display: inline-flex; }
+  /* 抽屉有汉堡入口了，桌面拉手在窄屏隐藏，避免双重入口 */
+  .side-toggle { display: none !important; }
+  /* index 的 sidebar：横向滚动条 → 左侧 fixed 抽屉（含分组标签，竖向排） */
+  .layout .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 90;
+    width: 272px; height: auto;
+    flex-direction: column; align-items: stretch; gap: 14px;
+    background: var(--surface);
+    border-right: 1px solid var(--hairline); border-bottom: none;
+    padding: 16px 12px; overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform .24s ease;
+    -webkit-overflow-scrolling: touch;
+  }
+  body:not(.ps-closed) .layout .sidebar { transform: none; box-shadow: 0 0 48px rgba(15, 18, 22, 0.16); }
+  .layout .sidebar .nav-group { display: block; }
+  .layout .sidebar .nav-label { display: block; }
+  .layout .sidebar .side-nav { flex-direction: column; }
+  .layout .sidebar .side-nav a { white-space: normal; }
+  .layout .sidebar .brand { padding: 4px 8px 8px; }
+  .layout .sidebar .side-foot { display: block; }
+  /* 其他页的 page-sidebar：顶栏同高改全高抽屉 */
+  .page-sidebar { top: 0; z-index: 90; width: 272px; }
+}
+@media (max-width: 480px) {
+  .layout .sidebar { width: min(272px, 82vw); }
+  .page-sidebar { width: min(272px, 82vw); }
+}
+
+/* ============================================================
+   v2.25 国内访问诊断横幅（数据加载失败时出现，可重试/关闭）
+   ============================================================ */
+.net-banner {
+  position: fixed; left: 12px; right: 12px; bottom: 16px; z-index: 200;
+  display: flex; align-items: center; gap: 11px;
+  max-width: 620px; margin: 0 auto; padding: 12px 14px;
+  background: linear-gradient(128deg, #fffdf5, #fff7e6);
+  border: 1px solid #f0d9a8; border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(120, 80, 10, 0.14);
+  font-size: 13px; color: #6b4d12;
+}
+.net-banner[hidden] { display: none !important; }
+.net-banner-ico { font-size: 20px; flex-shrink: 0; }
+.net-banner-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.net-banner-txt b { font-size: 13.5px; color: #8a5a12; }
+.net-banner-txt span { font-size: 12px; line-height: 1.5; color: #a4762f; }
+.net-banner-btn {
+  flex-shrink: 0; height: 32px; padding: 0 16px;
+  border: none; border-radius: 999px;
+  background: var(--red); color: #fff; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: opacity .15s;
+}
+.net-banner-btn:hover { opacity: .88; }
+.net-banner-close {
+  flex-shrink: 0; width: 28px; height: 28px;
+  border: none; border-radius: 999px; background: transparent;
+  color: #b08b3e; font-size: 13px; cursor: pointer;
+}
+.net-banner-close:hover { background: rgba(176, 139, 62, 0.12); }
+@media (max-width: 480px) {
+  .net-banner { left: 8px; right: 8px; bottom: 10px; padding: 10px 12px; gap: 9px; }
+  .net-banner-txt span { font-size: 11.5px; }
+  .net-banner-btn { height: 30px; padding: 0 13px; }
+}
